@@ -3,6 +3,7 @@ import string, random, operator, os
 import pandas as pd
 import numpy as np
 from test import SLR_final
+from nltk.downloader import ErrorMessage
 
 pd.options.mode.chained_assignment = None
 
@@ -20,33 +21,212 @@ ALLOWABLE_CHARS = string.ascii_letters + string.digits + string.punctuation
 DEBUG_MODE = 1
 
 class PyApp:
+    def generate(self, widget, Spin_Btn, Btn, entry):
+        signature_length = []
+        for i in range(5):
+            if(Btn[i].state):
+                signature_length.append(Spin_Btn[i].get_value_as_int())
+        
+        save_filename = entry.get_text()
+        if save_filename.endswith('.txt'):
+            try:
+                patternGenerator(file_name=save_filename, size_arr=signature_length)
+            #Exception Handling in case file save fails
+            except:
+                print "Failed to create file. Please debug!"
+                self.message_display(message_text="Failed to create file. Please debug!")
+        else:
+            self.message_display(message_text="File extension must be '.txt'. Please try again!")
+        
+        
     def callback(self, widget, data=None):
         """Callback function customized based on what buttons are pressed"""
-        if data == "Read from CSV":
-            dialog = gtk.FileChooserDialog("Open..",
+        if data == "Read_from_CSV":
+            dialog = gtk.FileChooserDialog("Open Signature CSV",
                            None,
                            gtk.FILE_CHOOSER_ACTION_OPEN,
                            (gtk.STOCK_CANCEL, gtk.RESPONSE_CANCEL,
                             gtk.STOCK_OPEN, gtk.RESPONSE_OK))
             dialog.set_default_response(gtk.RESPONSE_OK)
+            
+            #Add Filter to view only CSV Files
             filter = gtk.FileFilter()
-            dialog.set_current_folder("C:/Users/sanke/workspace/PythonDev")
+            dialog.set_current_folder(os.getcwd())
             filter.set_name("CSV Only")
             filter.add_pattern("*.csv")
             dialog.add_filter(filter)            
             response = dialog.run()
+            
             if response == gtk.RESPONSE_OK:
+                #Update GUI to new CSV file
                 file_location=dialog.get_filename()
                 dialog.destroy()
-                loop_call(read_csv=True, csv_location=file_location)
+                self.window.destroy()
+                loop_call(read_csv=True, file_location=file_location)
             elif response == gtk.RESPONSE_CANCEL:
                 dialog.destroy()
-                print 'Closed, no files selected'
+                #print 'Closed, no files selected'
                    
-        elif data == "Open Results":
-            #Hardcoded filename to default for now. Can be taken as input in the future.
-            filename = r'C:/Users/sanke/workspace/PythonDev/InterpretPatterns.csv'
-            os.system("start "+filename)
+        elif data == "Read_from_Txt":
+            dialog = gtk.FileChooserDialog("Open Signature Text",
+                           None,
+                           gtk.FILE_CHOOSER_ACTION_OPEN,
+                           (gtk.STOCK_CANCEL, gtk.RESPONSE_CANCEL,
+                            gtk.STOCK_OPEN, gtk.RESPONSE_OK))
+            dialog.set_default_response(gtk.RESPONSE_OK)
+            
+            #Add Filter to view only Txt Files
+            filter = gtk.FileFilter()
+            dialog.set_current_folder(os.getcwd())
+            filter.set_name("Text Only")
+            filter.add_pattern("*.txt")
+            dialog.add_filter(filter)            
+            response = dialog.run()
+            
+            if response == gtk.RESPONSE_OK:
+                #Update GUI to new Txt file
+                file_location=dialog.get_filename()
+                dialog.destroy()
+                self.window.destroy()
+                loop_call(read_csv=False, file_location=file_location)
+            elif response == gtk.RESPONSE_CANCEL:
+                dialog.destroy()
+                
+        elif data == "Display_Original_Sign":
+            dialog = gtk.Dialog(title="Original Signatures", parent=None, 
+                                flags=gtk.DIALOG_MODAL|gtk.DIALOG_NO_SEPARATOR, 
+                                buttons=(gtk.STOCK_OK, gtk.RESPONSE_OK))
+            dialog.set_default_response(gtk.RESPONSE_OK)
+            dialog.set_default_size(400,300)
+            
+            frame = gtk.Frame()
+        
+            #Create scrollable display
+            scrolledWin = gtk.ScrolledWindow()
+            scrolledWin.set_policy(gtk.POLICY_AUTOMATIC, gtk.POLICY_NEVER)
+            
+            tableD = gtk.Table(rows=5, columns=2, homogeneous=False) #len(self.df)+1
+            tableD.set_col_spacings(10)       
+            title_bar = ['ID', 'Original']
+            for i in range(2):
+                label = gtk.Label(title_bar[i])
+                label.modify_font(pango.FontDescription("Sans bold 15"))
+                tableD.attach(label, i, i+1, 0, 1)
+            
+            for i in range(2):
+                for j in range(1, len(self.df)+1):
+                    if(i<3):
+                        label = gtk.Label(str(self.df[title_bar[i]][j-1]))
+                        label.modify_font(pango.FontDescription("Sans 10"))
+                        label.set_alignment(0, 0)
+                        tableD.attach(label, i, i+1, j, j+1)
+            
+            tableD.show()
+            scrolledWin.add_with_viewport(tableD)
+            
+            frame.add(scrolledWin)
+            scrolledWin.show()
+            
+            dialog.vbox.pack_start(frame, expand = True, fill = True, padding = 0)
+            dialog.vbox.show_all()
+            #dialog.vbox.pack_start(label)
+            #label.show()
+            
+             
+            response = dialog.run()
+            if response == gtk.RESPONSE_OK:
+                dialog.destroy()
+        
+        
+        elif data == "Save_Signature":
+            dialog = gtk.FileChooserDialog("Save Signature File",
+                           None,
+                           gtk.FILE_CHOOSER_ACTION_SAVE,
+                           (gtk.STOCK_CANCEL, gtk.RESPONSE_CANCEL,
+                            gtk.STOCK_SAVE, gtk.RESPONSE_OK))
+            dialog.set_default_response(gtk.RESPONSE_OK)   
+            dialog.set_current_folder(os.getcwd())
+            
+            #Create a filter to show only csv files
+            filter = gtk.FileFilter()
+            filter.set_name("CSV Only")
+            filter.add_pattern("*.csv")
+            dialog.add_filter(filter)  
+            
+            response = dialog.run()
+            
+            #Run a basic check to ensure user has provided CSV file name
+            if response == gtk.RESPONSE_OK:
+                save_filename = dialog.get_filename()
+                if save_filename.endswith('.csv'):
+                    try:
+                        self.df.to_csv(save_filename, index=False)
+                    #Exception Handling in case file save fails
+                    except:
+                        print "Failed to create file. Please debug!"
+                        self.message_display(message_text="Failed to create file. Please debug!")
+                else:
+                    self.message_display(message_text="File extension must be '.csv'. Please try again!")
+                dialog.destroy()
+            
+            elif response == gtk.RESPONSE_CANCEL:
+                dialog.destroy()
+                
+        elif data == "Generate_Pattern":
+            dialog = gtk.Dialog(title="Generate Random Text for Signatures", parent=None, 
+                                flags=gtk.DIALOG_MODAL|gtk.DIALOG_NO_SEPARATOR, 
+                                buttons=(gtk.STOCK_OK, gtk.RESPONSE_OK))
+            dialog.set_default_response(gtk.RESPONSE_OK)
+            dialog.set_default_size(400,300)        
+            
+            HBox = [None]*5
+            VBox = [None]*5
+            Label = [None]*5
+            Adj = [None]*5
+            Spin_Btn = [None]*5
+            Btn = [None]*5
+            for i in range(0, 5):
+                HBox[i] = gtk.HBox()
+                VBox[i] = gtk.VBox()
+                Label[i] = gtk.Label("Signature "+str(i+1))
+                if(i==0):
+                    Adj[i] = gtk.Adjustment(value=3, lower=3, upper=130, step_incr=1)
+                else:
+                    Adj[i] = gtk.Adjustment(value=4, lower=4, upper=130, step_incr=1)
+                
+                Spin_Btn[i] = gtk.SpinButton(adjustment=Adj[i], climb_rate=0.0, digits=0)
+                HBox[i].pack_start(Label[i])
+                HBox[i].pack_start(Spin_Btn[i])
+                Btn[i] = gtk.CheckButton()
+                HBox[i].pack_start(Btn[i], False, False)
+                VBox[i].pack_start(HBox[i])
+                dialog.vbox.pack_start(VBox[i])
+            
+            VBoxL = gtk.VBox()
+            HBoxL = gtk.HBox()
+            button = gtk.Button("Generate!")
+            entry = gtk.Entry()
+            entry.set_text("RandomPatterns.txt")
+            tooltips = gtk.Tooltips()
+            tooltips.set_tip(entry, "Enter a valid *.txt filename")
+            button.connect("clicked", self.generate, Spin_Btn, Btn, entry)        
+            HBoxL.pack_start(button)
+            HBoxL.pack_start(entry)
+            VBoxL.pack_start(HBoxL)
+            dialog.vbox.pack_start(VBoxL)
+            
+            dialog.vbox.show_all()
+            response = dialog.run()
+            
+            if response == gtk.RESPONSE_OK:
+                dialog.destroy()
+
+    
+    def message_display(self, message_text, type=gtk.MESSAGE_ERROR, buttons=gtk.BUTTONS_OK):
+        message = gtk.MessageDialog(type=type, buttons=buttons)
+        message.set_markup(message_text)
+        message.run()
+        message.destroy()
     
     def destroy(self, widget, data=None):
         """Destroys the GUI instance"""
@@ -62,23 +242,23 @@ class PyApp:
         #Create new GTK Window instance
         self.window = gtk.Window(gtk.WINDOW_TOPLEVEL)
         self.window.connect("destroy", lambda w: gtk.main_quit())
-        self.window.set_title("Dictionary Utility")
+        self.window.set_title("Signature Utility")
         self.window.set_default_size(800, 600)
+        
         
         #Create partition for Data display
         dataBox = gtk.VBox()
         frame = gtk.Frame("Pattern Values")
-        frame.modify_bg(gtk.STATE_NORMAL, gtk.gdk.Color(red=65535))
         
         #Create scrollable display
         scrolledWin = gtk.ScrolledWindow()
         scrolledWin.set_policy(gtk.POLICY_AUTOMATIC, gtk.POLICY_NEVER)
         
         #Create Table to display values
-        self.table = gtk.Table(rows=len(df)+1, columns=7, homogeneous=False) 
+        self.table = gtk.Table(rows=len(df)+1, columns=5, homogeneous=False) 
         self.table.set_col_spacings(10)       
-        title_bar = ['ID', 'Size', 'HEX', 'Original', 'Vector', 'Enable', 'Index']
-        for i in range(7):
+        title_bar = ['ID', 'Size', 'HEX', 'Enable', 'Index']
+        for i in range(5):
             label = gtk.Label(title_bar[i])
             label.modify_font(pango.FontDescription("Sans bold 15"))
             self.table.attach(label, i, i+1, 0, 1)
@@ -87,17 +267,17 @@ class PyApp:
         ctr = 0
         button = [None]*5
         entry = [None]*5
-        for i in range(7):
+        for i in range(5):
             ctr = 0
             for j in range(1, len(df)+1):
-                if(i<5):
+                if(i<3):
                     label = gtk.Label(str(df[title_bar[i]][j-1]))
                     label.modify_font(pango.FontDescription("Sans 10"))
                     #label.set_use_markup(gtk.TRUE)
                     #label.set_markup('<span size="20000">'+str(df[title_bar[i]][j-1])+'</span>')
                     label.set_alignment(0, 0)
                     self.table.attach(label, i, i+1, j, j+1)
-                elif(i==5):
+                elif(i==3):
                     button[ctr] = gtk.CheckButton()
                     button[ctr].set_alignment(0, 0)
                     self.table.attach(button[ctr], i, i+1, j, j+1)
@@ -122,48 +302,111 @@ class PyApp:
         sorted_size = sorted(self.si.items(), key=operator.itemgetter(0))
         
         #Initialize table for size information
-        self.table2 = gtk.Table(rows=len(sorted_size)+1, columns=2, homogeneous=False)
-        self.table2.attach(gtk.Label("Size"), 0, 1, 0, 1)
-        self.table2.attach(gtk.Label("Count"), 1, 2, 0, 1)
+        table2 = gtk.Table(rows=len(sorted_size)+1, columns=2, homogeneous=False)
+        table2.attach(gtk.Label("Size"), 0, 1, 0, 1)
+        table2.attach(gtk.Label("Count"), 1, 2, 0, 1)
         
         for i in range(2):
             for j in range(1, len(sorted_size)+1):
                 label = gtk.Label(str(sorted_size[j-1][i]))
-                self.table2.attach(label, i, i+1, j, j+1)
-        frame.add(self.table2)
-            
+                table2.attach(label, i, i+1, j, j+1)
+        frame.add(table2)            
         
         sizeBox.pack_start(frame,  expand = True, fill = False, padding = 0)
         
         
         #Create buttons for creating New instance, Opening the file and quitting the app
         buttonBox = gtk.HBox()
-        button1 = gtk.Button("Read from CSV")
-        button1.connect("clicked", self.callback, "Read from CSV")
-        buttonBox.pack_start(button1,  expand = True, fill = True, padding = 0)
-        button1.show()
         
-        buttonBox3 = gtk.HBox()
-        button3 = gtk.Button("Open Results")
-        button3.connect("clicked", self.callback, "Open Results")
-        buttonBox3.pack_start(button3,  expand = True, fill = True, padding = 0)
-        button3.show()
+        buttonGen = gtk.Button("Generate Random Text\n for Signatures")
+        buttonGen.connect("clicked", self.callback, "Generate_Pattern")
+        buttonBox.pack_start(buttonGen,  expand = True, fill = True, padding = 0)
+        buttonGen.show()
         
-        buttonBox2 = gtk.VBox()
-        button2 = gtk.Button("Quit")
-        button2.connect("clicked", self.destroy, "Quit")
-        buttonBox2.pack_start(button2,  expand = True, fill = True, padding = 0)
-        button2.show()
+        buttonCSV = gtk.Button("Read Signatures\n from CSV")
+        buttonCSV.connect("clicked", self.callback, "Read_from_CSV")
+        buttonBox.pack_start(buttonCSV,  expand = True, fill = True, padding = 0)
+        buttonCSV.show()
+        
+        buttonTxt = gtk.Button("Read Signatures\n from Text")
+        buttonTxt.connect("clicked", self.callback, "Read_from_Txt")
+        buttonBox.pack_start(buttonTxt,  expand = True, fill = True, padding = 0)
+        buttonTxt.show()
+        
+        buttonDsp = gtk.Button("Display Original\n Signature")
+        buttonDsp.connect("clicked", self.callback, "Display_Original_Sign")
+        buttonBox.pack_start(buttonDsp,  expand = True, fill = True, padding = 0)
+        buttonDsp.show()
+        
+        buttonSave = gtk.Button()
+        tooltips = gtk.Tooltips()
+        image = gtk.Image()
+        image.set_from_stock(gtk.STOCK_FLOPPY, gtk.ICON_SIZE_BUTTON)
+        buttonSave.add(image)
+        #buttonSave.add(gtk.Label("Save As"))
+        buttonSave.connect("clicked", self.callback, "Save_Signature")
+        tooltips.set_tip(buttonSave, "Save Signature")
+        buttonBox.pack_start(buttonSave,  expand = True, fill = True, padding = 0)
+        buttonSave.show()
         
         #Arrange all the elements legibly
         self.window.add(dataBox)
         dataBox.add(sizeBox)
         sizeBox.add(buttonBox)
-        buttonBox.add(buttonBox3)
-        buttonBox3.add(buttonBox2)
         
         self.window.show_all()
+        
+        #Verification utility
+        retVal, textVal = verify_size(self.si)
+        if (retVal):
+            self.message_display("Signatures have the following error(s):\n"+textVal)
 
+
+def verify_size(size_index):
+    """Verifies if constraints are met for size of signatures.
+        Returns True, None if constraints are met
+        Returns False, ErrorMessage if contrains aren't met
+    """
+    
+    sorted_size = sorted(size_index.items(), key=operator.itemgetter(0))
+    flag=0;
+    ErrorMessage = ""
+    
+    if(len(sorted_size)>MAX_N_LENGTHS):
+        flag=1
+        ErrorMessage = "Count of lengths greater than: "+str(MAX_N_LENGTHS)+"\n"
+    elif(len(sorted_size)<MIN_N_LENGTHS):
+        flag=1
+        ErrorMessage += "Count of lengths less than: "+str(MIN_N_LENGTHS)+"\n"
+    
+    for i in range(len(sorted_size)):
+        if len(sorted_size)==1:
+            min_check = MIN_SIZE_SIGNATURE - 1
+        else:
+            min_check = MIN_SIZE_SIGNATURE
+        
+        if sorted_size[i][0]>MAX_SIZE_SIGNATURE:
+            flag=1
+            ErrorMessage+= "Signature length greater than: "+str(MAX_SIZE_SIGNATURE)+"\n"
+        elif sorted_size[i][0]<min_check:
+            flag=1
+            ErrorMessage+= "Signature length less than: "+str(MIN_SIZE_SIGNATURE)+"\n"
+        
+        if(i==0):
+            previous_val=sorted_size[0][0]
+            continue
+        
+        if(sorted_size[i][0]-previous_val<DISTANCE_CONSECUTIVE):
+            flag=1
+            ErrorMessage+= "Distance between consecutive signatures less than: "+str(DISTANCE_CONSECUTIVE)+"\n"
+        
+        previous_val=sorted_size[i][0]
+    
+    if(flag):
+        return 1, ErrorMessage
+    else:
+        return 0, None
+        
 def id_generator(size=MIN_SIZE_SIGNATURE, chars=ALLOWABLE_CHARS):
     """Generates a random ID of specified size and characters
         Inputs:
@@ -172,7 +415,9 @@ def id_generator(size=MIN_SIZE_SIGNATURE, chars=ALLOWABLE_CHARS):
     """
     return ''.join(random.choice(chars) for _ in range(size))
 
-def patternGenerator(file_name="patterns.txt"):
+def patternGenerator(file_name="patterns.txt", size_arr = [], min_n_lengths=MIN_N_LENGTHS, 
+                     max_n_lengths=MAX_N_LENGTHS, min_size_signature=MIN_SIZE_SIGNATURE,
+                     max_size_signature=MAX_SIZE_SIGNATURE, distance_consecutive=DISTANCE_CONSECUTIVE):
     """Generates a file in the local directory with a set of random patterns.
         Constraints:
         Length is between MIN_SIZE_SIGNATURE, MAX_SIZE_SIGNATURE
@@ -184,25 +429,25 @@ def patternGenerator(file_name="patterns.txt"):
     """
     try:
         fo = open(file_name, "wb")
-        n = random.randint(MIN_N_LENGTHS-1, MAX_N_LENGTHS)
-        #Hardcoding n to 5 temporarily
-        n=5
-        size_arr = []
-        #Generate array of random numbers, such that difference is greater than or equal to DISTANCE_CONSECUTIVE
-        while len(size_arr)!=n:
-            tmp = random.randint(MIN_SIZE_SIGNATURE, MAX_SIZE_SIGNATURE)
-            if(len(size_arr)==0):
-                size_arr.append(tmp)
-                continue
-            #Check for sizes of other elements
-            flag=True
-            for j in size_arr:
-                if(abs(tmp-j)<DISTANCE_CONSECUTIVE):
-                    flag=False
-                    break
-            if(flag):
-                size_arr.append(tmp)
-                    
+        if(len(size_arr)==0):
+            n = random.randint(min_n_lengths-1, max_n_lengths)
+            #Hardcoding n to 5 temporarily
+            #n=5
+            #Generate array of random numbers, such that difference is greater than or equal to DISTANCE_CONSECUTIVE
+            while len(size_arr)!=n:
+                tmp = random.randint(min_size_signature, max_size_signature)
+                if(len(size_arr)==0):
+                    size_arr.append(tmp)
+                    continue
+                #Check for sizes of other elements
+                flag=True
+                for j in size_arr:
+                    if(abs(tmp-j)<distance_consecutive):
+                        flag=False
+                        break
+                if(flag):
+                    size_arr.append(tmp)
+                        
         for i in size_arr:
             #Call Random string generator
             fo.write(id_generator(i)+"\n")
@@ -240,7 +485,7 @@ def generateBitStream(ID, Size_val, HEX_val, SLR_val, SLR_index):
     
     return ID+str_pad+Size_val+str_pad+SLR_final+str_pad+HEX_val
 
-def interpretPattern(file_name="patterns.txt", read_csv=False):
+def interpretPattern(read_csv=False, file_location="patterns.txt"):
     """Reads the pattern file and generates ID, HEX and Size paramters. 
         Returns None, None on failure and a dataframe, dictionary on success
         Inputs:
@@ -248,16 +493,16 @@ def interpretPattern(file_name="patterns.txt", read_csv=False):
     """
     if(read_csv):
         try:
-            csv_data = pd.read_csv(file_name, header=0)
+            csv_data = pd.read_csv(file_location, header=0)
         except Exception,e:
             print "Failed to read file with exception" + str(e)
             return None, None, 1
         
-    proc_data = pd.DataFrame(0, index=np.arange(MIN_N_LENGTHS-1, MAX_N_LENGTHS), columns = ['ID', 'Size', 'HEX', 'Original', 'Vector'])
+    proc_data = pd.DataFrame(0, index=np.arange(MIN_N_LENGTHS-1, MAX_N_LENGTHS), columns = ['ID', 'Size', 'HEX', 'Original'])
     size_index = {}
     if not(read_csv):
         try:
-            fo = open(file_name, "r")
+            fo = open(file_location, "r")
             i=0
             for line in fo:
                 #Strip the newline character
@@ -295,7 +540,9 @@ def interpretPattern(file_name="patterns.txt", read_csv=False):
                     size_index[size_line] += 1
             else:
                 size_index[size_line] = 1
-                    
+    
+    #Commenting out block for Vector Generation
+    """                
     #Sort the dataframe from lowest to highest based on size
     proc_data = proc_data.sort_values(by='Size', ascending=True)
     proc_data.reset_index(drop=True, inplace=True)
@@ -321,15 +568,16 @@ def interpretPattern(file_name="patterns.txt", read_csv=False):
     
     #Write as CSV
     proc_data.to_csv("InterpretPatterns.csv", index=False)
-    
+    """
+    proc_data = proc_data[(proc_data.T != 0).any()]
     return proc_data, size_index, 0
 
-def loop_call(read_csv=False, csv_location="patterns.txt"):
+def loop_call(read_csv=False, file_location="patterns.txt"):
     """Function to generate new patterns and display it on the GUI
     """
     if not(read_csv):
         patternGenerator()
-    df, si, retVal = interpretPattern(csv_location, read_csv)
+    df, si, retVal = interpretPattern(read_csv=read_csv, file_location=file_location)
     #GTK object
     if(~retVal):
         PyApp(df, si)
