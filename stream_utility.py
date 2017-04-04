@@ -1,7 +1,8 @@
-import gtk, pango
+import gtk, pango, cgi
 import string, random, operator, os
 import pandas as pd
 import numpy as np
+import fileinput
 
 pd.options.mode.chained_assignment = None
 
@@ -36,7 +37,7 @@ class StreamApp:
         if save_filename.endswith('.txt'):
             try:
                 patternGenerator(file_name=save_filename, size_arr=signature_length)
-                self.message_display(message_text="Successfully created "+save_filename, type=gtk.MESSAGE_INFO)
+                self.message_display(message_text="Successfully created "+save_filename, _type=gtk.MESSAGE_INFO)
             #Exception Handling in case file save fails
             except:
                 print "Failed to create file. Please debug!"
@@ -90,31 +91,33 @@ class StreamApp:
         title_bar = ['SID', 'Original']
         for i in range(2):
             label = gtk.Label(title_bar[i])
-            label.modify_font(pango.FontDescription("Sans bold 15"))
-            tableD.attach(label, i, i+1, 0, 1)
+            label.modify_font(pango.FontDescription("Sans bold 12"))
+            tableD.attach(label, i, i+1, 0, 1, xpadding=5)
         
+        title_bar = ['SID', 'Hex']
         for i in range(2):
             for j in range(1, len(self.df)+1):
                 if(i==1):
-                    text = str(self.df[title_bar[i]][j-1])
+                    text = str(self.df[title_bar[i]][j-1]).decode('hex')
                     flag=0
                     color = ["red", "blue", "green", "yellow", "orange"]
+                    """
                     for k in self.si:
                         start = int(k) + 25*flag
                         end = start + int(self.si[k])
                         text = text[:start]+'<span color="'+color[(flag)%5]+'">'+text[start:end]+'</span>'+text[end:]
                         flag = flag + 1                   
-                
+                    """
                     #print text
                     label = gtk.Label()
-                    label.set_markup(text)
+                    label.set_markup(cgi.escape(text))
                     
                 else:
                     label = gtk.Label(str(self.df[title_bar[i]][j-1]))
                 
                 label.modify_font(pango.FontDescription("Sans 10"))
                 label.set_alignment(0, 0)
-                tableD.attach(label, i, i+1, j, j+1)
+                tableD.attach(label, i, i+1, j, j+1, xpadding=5)
         tableD.show()
         scrolledWin.add_with_viewport(tableD)
         
@@ -216,16 +219,16 @@ class StreamApp:
         # Finally, return the actual menu bar created by the item factory.
         return item_factory.get_widget("<main>")
    
-    def __init__(self, df, si, file_location):
+    def __init__(self, df, file_location):
         #Retrieve Dataframe and Size dictionary
         self.df = df
-        self.si = si
+        #self.si = si
         
         self.showSize = 1
         
         self.menu_items = (
             ( "/_File",         None,         None, 0, "<Branch>" ),
-            ( "/File/_Read HEX Stream with IDs, Size and Index(.csv)",     "<control>O", self.read_from_csv, 0, None ),
+            ( "/File/_Read HEX Stream with SID and Size(.csv)",     "<control>O", self.read_from_csv, 0, None ),
             ( "/File/sep1",     None,         None, 0, "<Separator>" ),
             ( "/File/Quit",     "<control>Q", self.destroy, 0, None ),
             ( "/_Display",      None,         None, 0, "<Branch>" ),
@@ -237,7 +240,7 @@ class StreamApp:
         #Create new GTK Window instance
         self.window = gtk.Window(gtk.WINDOW_TOPLEVEL)
         self.window.connect("destroy", lambda w: gtk.main_quit())
-        self.window.set_title("Stream Utility | File: "+str(file_location))
+        self.window.set_title("Streams | File: "+str(file_location))
         self.window.set_default_size(640, 480)
         
         main_vbox = gtk.VBox(False, 1)
@@ -261,11 +264,12 @@ class StreamApp:
         #Create Table to display values
         self.table = gtk.Table(rows=len(df)+1, columns=4, homogeneous=False) 
         self.table.set_col_spacings(10)       
-        title_bar = ['SID', 'Size', 'HEX']
+        title_bar = ['SID', 'Size', 'Hex']
         for i in range(3):
             label = gtk.Label(title_bar[i])
-            label.modify_font(pango.FontDescription("Sans bold 15"))
-            self.table.attach(label, i, i+1, 0, 1)
+            label.modify_font(pango.FontDescription("Sans bold 12"))
+            label.set_alignment(0, 0)
+            self.table.attach(label, i, i+1, 0, 1, xpadding=5)
         
         #Loop through table to display values
         for i in range(3):
@@ -275,7 +279,7 @@ class StreamApp:
                 #label.set_use_markup(gtk.TRUE)
                 #label.set_markup('<span size="20000">'+str(df[title_bar[i]][j-1])+'</span>')
                 label.set_alignment(0, 0)
-                self.table.attach(label, i, i+1, j, j+1)
+                self.table.attach(label, i, i+1, j, j+1, xpadding=5)
         
         scrolledWin.add_with_viewport(self.table)
         self.table.show()
@@ -290,6 +294,7 @@ class StreamApp:
         sizeBox = gtk.VBox()
         frame = gtk.Frame("Signature information")
         
+        """
         sorted_size = sorted(self.si.items(), key=operator.itemgetter(0))
         
         #Initialize table for size information
@@ -304,7 +309,7 @@ class StreamApp:
         frame.add(table2)            
         
         sizeBox.pack_start(frame,  expand = False, fill = True, padding = 0)
-        
+        """
         #Arrange all the elements legibly
         self.window.add(main_vbox)
         main_vbox.add(dataBox)
@@ -411,36 +416,30 @@ def patternGenerator(file_name="stream.txt", size_arr = [], min_n_lengths=MIN_N_
         print "Failed to open file"
         return 1
 
-def interpretPattern(read_csv=True, file_location="test3.csv"):
+def interpretPattern(read_csv=True, file_location="Stream_Input.csv"):
     """Reads the pattern file and generates ID, HEX and Size paramters. 
         Returns None, None on failure and a dataframe, dictionary on success
         Inputs:
         file_name: Name of the file
     """
     if(read_csv):
-        try:
-            csv_data = pd.read_csv(file_location, header=0)
+        try:                
+            csv_data = pd.read_csv(file_location, skiprows=[0], header=None, names = ["SID", "Size", "Hex"])
         except Exception,e:
             print "Failed to read file with exception" + str(e)
             return None, 1
     
-    signature_index = csv_data['Start_byte_index'][0].split('|')
-    signature_data = {}
-    for i in signature_index:
-        if(i!=''):
-            tmp=i.split(':')
-            signature_data[tmp[0]]=tmp[1]
-    return csv_data, signature_data, 0
+    return csv_data, 0
 
-def loop_call(read_csv=True, file_location="test3.csv"):
+def loop_call(read_csv=True, file_location="Stream_Input.csv"):
     """Function to generate new patterns and display it on the GUI
     """
     if not(read_csv):
         patternGenerator()
-    df, si, retVal = interpretPattern(read_csv=read_csv, file_location=file_location)
+    df, retVal = interpretPattern(read_csv=read_csv, file_location=file_location)
     #GTK object
     if(~retVal):
-        StreamApp(df, si, file_location)
+        StreamApp(df, file_location)
         gtk.main()
     else:
         print "Debug the exception!"
