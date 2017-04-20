@@ -16,11 +16,11 @@ MAX_N_LENGTHS = 5
 MIN_SIZE_SIGNATURE = 4*8
 MAX_SIZE_SIGNATURE = 130*8
 DISTANCE_CONSECUTIVE = 2*8
+
 MAX_COUNT_STREAMS = 15
 
 ALLOWABLE_CHARS = string.ascii_letters + string.digits + string.punctuation
 
-DEBUG_MODE = 1
 
 class PyApp:
     def generate(self, widget, Spin_Btn, Btn, Spin_Btn_Count ,entry):
@@ -84,6 +84,17 @@ class PyApp:
             else:
                 self.message_display("Failed to read file. Please verify the file contents.")
     
+    def read_csv_stats(self, widget, data):
+        """Callback function to initiate reading CSV file"""
+        file_location = self.read_from_file(widget, data, message="Open Stream Stats CSV", file_type="csv")
+        if(file_location!=None and len(file_location)>0):
+            self.window3.destroy()
+            ver_df, retVal = interpretStats(file_location=file_location)
+            if(~retVal):
+                self.create_verification_window(ver_df)
+            else:
+                self.message_display("Failed to read file. Please verify the file contents.")
+                
     def read_text_stream(self, widget, data):
         """Callback function to initiate reading txt file"""
         file_location = self.read_from_file(widget, data, message="Open Stream File", file_type="txt")
@@ -101,15 +112,18 @@ class PyApp:
         #Clear old values
         for i in range(self.current_index):
             self.update_Stream_GUI(SID='', Size_Stream='', Select_Stream=False, SgnPosition='', History='', index=i)
+        self.stream_df = pd.DataFrame(columns = ['SID', 'Size', 'Hex', 'Original'])
         self.current_index = 0
-        self.history_index = [[[-1, -1, -1]]] * MAX_COUNT_STREAMS
+        self.history_index = [[[-1, -1, -1, -1]]] * MAX_COUNT_STREAMS
         self.size_history = {}
         self.current_index = 0
+        if(hasattr(self,'undo_button')):
+            self.undo_button.set_sensitive(False)
         
         file_location = self.read_from_file(widget, data, message="Open Binary Stream output File", file_type="csv")
+        self.window.set_title("Stream Construction Window | "+str(file_location))
         if(file_location!=None and len(file_location)>0):    
             stream_df_map = pd.read_csv(file_location, skiprows=[0], header=None)
-            undo_warning_flag = 0
             for i in range(len(stream_df_map)):
                 SID = int(stream_df_map[0][i])
                 Size_stream = int(stream_df_map[1][i])
@@ -123,7 +137,6 @@ class PyApp:
                 SgnPosition = ''
                 if(count>0):
                     pattern_val = pattern_val[:-1]
-                    undo_warning_flag=1
                     pattern_val = pattern_val.split(',')
                     ctr=0
                     for _ in range(count):
@@ -133,10 +146,10 @@ class PyApp:
                         SgnPosition+='('+str(ID)+':'+str(S_Index)+'-'+str(E_Index)+') '
                         ctr += 3
                         
-                        if(self.history_index[i][0]==[-1, -1, -1]):
-                            self.history_index[i] = [[ID, S_Index, E_Index]]
+                        if(self.history_index[i][0]==[-1, -1, -1, -1]):
+                            self.history_index[i] = [[ID, S_Index, E_Index, 0]]
                         else:
-                            self.history_index[i].append([id, S_Index, E_Index])
+                            self.history_index[i].append([id, S_Index, E_Index, 0])
                         #Create an entry in the dictionary for size
                         sign_size = E_Index - S_Index + 1
                         if(self.size_history.has_key(sign_size)):
@@ -150,85 +163,60 @@ class PyApp:
             #Make a copy of the stream to have an option to undo later
             self.stream_df_copy = self.stream_df.copy()
             
-            #Display a warning message for undo
-            if(undo_warning_flag==1):
-                self.message_display("Please note undo functionality will not work for previously inserted signatures as the original stream copy does not exist. \n\nPlease use the option ONLY for new signatures. Old signature location will remain unaffected.", _type=gtk.MESSAGE_WARNING)
-            
-            self.create_insertion_dialog(widget, data)
+            self.create_insertion_dialog(widget, data, undoButton=False)
     
     def load_stream_map(self, widget, data):
+        #Clear old values
+        for i in range(self.current_index):
+            self.update_Stream_GUI(SID='', Size_Stream='', Select_Stream=False, SgnPosition='', History='', index=i)
+        self.stream_df = pd.DataFrame(columns = ['SID', 'Size', 'Hex', 'Original'])
+        self.current_index = 0
+        self.history_index = [[[-1, -1, -1, -1]]] * MAX_COUNT_STREAMS
+        self.size_history = {}
+        self.current_index = 0
+        if(hasattr(self,'undo_button')):
+            self.undo_button.set_sensitive(True)
+        
         file_location = self.read_from_file(widget, data, message="Open Stream Map", file_type="csv")
+        self.window.set_title("Stream Construction Window | "+str(file_location))
         if(file_location!=None and len(file_location)>0):
             stream_df_map = pd.read_csv(file_location, header=None, names=['SID', 'Stream_Size', 'ID', 'Start_index', 'End_Index'])
-            new_stream_df = pd.DataFrame(columns = ['SID', 'Size', 'Hex', 'Pattern'])
-            idx=0
             i=0
-            new_size_hist={}
             while i < len(stream_df_map):
                 SID = int(stream_df_map['SID'][i])
                 Size_stream = int(stream_df_map['Stream_Size'][i])
                 Stream = id_generator(size=Size_stream/8)
+                Hex = Stream.encode("hex")
+                self.stream_df.loc[self.current_index]=[SID, Size_stream, Hex, Stream]
+                
                 search_val = stream_df_map[stream_df_map['SID']==SID]
                 search_val.reset_index(drop=True, inplace=True)
                 sign_count = len(search_val)
-                pattern_val = str(sign_count)+','
+                SgnPosition = ''
                 for j in range(i, i+sign_count):
-                    ID = int(stream_df_map['ID'][j])
-                    start_index = int(stream_df_map['Start_index'][j])
-                    end_index = int(stream_df_map['End_Index'][j])
-                    pattern_val+=str(ID)+','+str(start_index)+','+str(end_index)+','
-                    sign_size = end_index - start_index + 1
-                    stream_data = Stream
-                    
-                    search_val_sign = self.df[self.df['ID']==ID]
-                    search_val_sign.reset_index(drop=True, inplace=True)
-                    sign_val = search_val_sign['Original'][0]
-                               
-                    stream_data = stream_data[0:start_index] + sign_val + stream_data[end_index+1:]
-                    Stream = stream_data
-                    #new_stream_df['Hex'][idx] = stream_data.encode("hex")
-                    if(new_size_hist.has_key(sign_size)):
-                        new_size_hist[sign_size] += 1
-                    else:
-                        new_size_hist[sign_size] = 1
-                pattern_val = pattern_val[:-1]
-                new_stream_df.loc[idx]=[SID, Size_stream, Stream.encode("Hex"), pattern_val]
-                i = i + sign_count
-                idx = idx + 1
+                    if(stream_df_map['ID'][j]>-1):
+                        ID = int(stream_df_map['ID'][j])
+                        S_Index = int(stream_df_map['Start_index'][j])
+                        E_Index = int(stream_df_map['End_Index'][j])
+                        SgnPosition+='('+str(ID)+':'+str(S_Index)+'-'+str(E_Index)+') '
+                        
+                        if(self.history_index[self.current_index][0]==[-1, -1, -1, -1]):
+                                self.history_index[self.current_index] = [[ID, S_Index, E_Index, 0]]
+                        else:
+                            self.history_index[self.current_index].append([id, S_Index, E_Index, 0])
+                            
+                        #Create an entry in the dictionary for size
+                        sign_size = E_Index - S_Index + 1
+                        if(self.size_history.has_key(sign_size)):
+                            self.size_history[sign_size] += 1
+                        else:
+                            self.size_history[sign_size] = 1
+                        
+                self.update_Stream_GUI(SID=SID, Size_Stream=Size_stream/8, Select_Stream=True, SgnPosition=SgnPosition, History=None, index=self.current_index)
+                self.current_index += 1
+                i = i + sign_count                
+            self.create_insertion_dialog(widget, data)
             
-            new_stream_df['SID'] = new_stream_df['SID'].astype(int)
-            new_stream_df['Size'] = new_stream_df['Size'].astype(int)
-            
-            size_arr = []
-            sorted_size = sorted(new_size_hist.items(), key=operator.itemgetter(0), reverse=True)
-            for i in sorted_size:
-                if i[1]>0:
-                    #Convert to bits
-                    size_arr.append(i[0]*8)
-            #size_arr = sorted(size_arr, reverse=True)
-            if(len(size_arr)==0):
-                Load_Line = 'L,0,0,0,0,0'
-            elif(len(size_arr)==1):
-                Load_Line = 'L,'+str(size_arr[0])+',0,0,0,0'
-            elif(len(size_arr)==2):
-                Load_Line = 'L,'+str(size_arr[0])+',0,0,0,'+str(size_arr[1])
-            elif(len(size_arr)==3):
-                Load_Line = 'L,'+str(size_arr[0])+',0,0,'+str(size_arr[1])+','+str(size_arr[2])
-            elif(len(size_arr)==4):
-                Load_Line = 'L,'+str(size_arr[0])+',0,'+str(size_arr[1])+','+str(size_arr[2])+','+str(size_arr[3])
-            else:
-                Load_Line = 'L,'+str(size_arr[0])+','+str(size_arr[1])+','+str(size_arr[2])+','+str(size_arr[3])+','+str(size_arr[4])
-            
-            self.message_display("Please choose a location to save Stream Binary output file", _type=gtk.MESSAGE_INFO)
-            file_location = self.save_signature(widget, data=None, save_default_df=False, df=new_stream_df, header=True)
-            
-            for line in fileinput.input(file_location, inplace=True):
-                if 'SID' in line:
-                    print Load_Line
-                else:
-                    line = line.replace('"', '')
-                    line = line.strip('\n')
-                    print line
             
     def read_from_file(self, widget, data, message, file_type):
         """Callback function to initiate reading a generic file"""
@@ -334,14 +322,13 @@ class PyApp:
         
         response = dialog.run()
         
-        if save_default_df:
-            save_df = self.df.copy()
-            save_df.drop('Original', axis=1, inplace=True)
-        else:
-            save_df = df.copy()
-        
         #Run a basic check to ensure user has provided CSV file name
         if response == gtk.RESPONSE_OK:
+            if save_default_df:
+                save_df = self.df.copy()
+                save_df.drop('Original', axis=1, inplace=True)
+            else:
+                save_df = df.copy()
             save_filename = dialog.get_filename()
             if save_filename.endswith('.csv'):
                 try:
@@ -461,7 +448,8 @@ class PyApp:
                 pass
             
         if SgnPosition!=None:
-            self.SgnPosition[index].set_text(SgnPosition)
+            #self.SgnPosition[index].set_text(SgnPosition)
+            self.SgnPosition[index].set_markup(SgnPosition)
         if History!=None:
             self.History.set_text(History)
         
@@ -534,7 +522,7 @@ class PyApp:
         #Create Table to display values
         self.table_stream = gtk.Table(rows=1+MAX_COUNT_STREAMS, columns=4, homogeneous=False) 
         self.table_stream.set_col_spacings(10)
-        title_bar = ['SID', 'Size(bytes)', 'Select', 'Signature position(ID: Start Index-End Index)']
+        title_bar = ['SID', 'Size(bytes)', 'Select', 'Signature (ID: Start-End)']
         for i in range(4):
             label = gtk.Label(title_bar[i])
             label.modify_font(pango.FontDescription("Sans bold 12"))
@@ -584,7 +572,92 @@ class PyApp:
     def delete_stream_window(self, widget, data=None):
         self.change_signature_select_line_state(state=False)
     
-    def create_stream_window(self, df=None, history=None):
+    def create_verification_table(self):
+        #Create Table to display values
+        df=self.ver_df
+        self.table_verification = gtk.Table(rows=len(df)+1, columns=6, homogeneous=False) 
+        self.table_verification.set_col_spacings(10)
+        title_bar = ['Time', 'Query Op', 'Start Index', 'End Index', 'Verification Result', 'Reason']
+        for i in range(6):
+            label = gtk.Label(title_bar[i])
+            label.modify_font(pango.FontDescription("Sans bold 12"))
+            label.set_alignment(0, 0)
+            self.table_verification.attach(label, i, i+1, 0, 1, xpadding=5)
+        
+        self.ver_result = [None] * len(df)
+        self.ver_reason = [None] * len(df)
+        #Loop through table to display values
+        title_bar = ['Time', 'Query_Op', 'Start_Index', 'End_Index']
+        for i in range(6):
+            for j in range(1, len(df)+1):
+                if(i<4):
+                    label = gtk.Label(str(df[title_bar[i]][j-1]))
+                    label.modify_font(pango.FontDescription("Sans 10"))
+                    label.set_selectable(True)
+                    label.set_alignment(0, 0)
+                    self.table_verification.attach(label, i, i+1, j, j+1, xpadding=5)
+                elif(i==4):
+                    label = gtk.Label("")
+                    label.set_alignment(0, 0)
+                    self.ver_result[j-1] = label
+                    self.table_verification.attach(self.ver_result[j-1], i, i+1, j, j+1, xpadding=5)
+                else:
+                    label = gtk.Label("")
+                    label.set_alignment(0, 0)
+                    self.ver_result[j-1] = label
+                    self.table_verification.attach(self.ver_result[j-1], i, i+1, j, j+1, xpadding=5)
+        
+        self.table_verification.show()
+        
+    def create_verification_window(self, ver_df):
+        """Creates Window 3 for Stream verification"""
+        self.window3 = gtk.Window(gtk.WINDOW_TOPLEVEL)
+        self.window3.connect("destroy", lambda w: self.window3.destroy())
+        self.window3.set_title("Stream Verification Window")
+        self.window3.set_default_size(640, 480)
+        
+        self.ver_df = ver_df
+        
+        main_vbox = gtk.VBox(False, 1)
+        main_vbox.set_border_width(1)
+        main_vbox.show()
+        menu_items3 = (
+            ( "/_File",         None,         None, 0, "<Branch>" ),
+            ( "/File/_Load Stream Stats file",     "<control>O", self.read_csv_stats, 0, None ),
+            )
+        
+        menubar = self.get_main_menu(self.window3, menu_items3)
+
+        main_vbox.pack_start(menubar, False, True, 0)
+        menubar.show()
+        
+        dataBox = gtk.VBox(spacing=30)
+        frame = gtk.Frame("Stream Stats")
+        
+        #Create scrollable display
+        scrolledWin = gtk.ScrolledWindow()
+        if(len(ver_df)<15):
+            scrolledWin.set_policy(gtk.POLICY_AUTOMATIC, gtk.POLICY_NEVER)
+        else:
+            scrolledWin.set_policy(gtk.POLICY_AUTOMATIC, gtk.POLICY_AUTOMATIC)
+            
+        self.create_verification_table()        
+        scrolledWin.add_with_viewport(self.table_verification)      
+        
+        frame.add(scrolledWin)
+        scrolledWin.show()
+        
+        if(len(ver_df)<15):
+            dataBox.pack_start(frame,  expand = False, fill = False, padding = 15)
+        else:
+            dataBox.pack_start(frame,  expand = True, fill = True, padding = 15)
+            
+        main_vbox.pack_start(dataBox, True, True)
+        self.window3.add(main_vbox)
+        self.window3.show_all()    
+        
+        
+    def create_stream_window(self):
         """Creates Window 2 for Stream viewing and editing"""
         self.window2 = gtk.Window(gtk.WINDOW_TOPLEVEL)
         self.window2.connect("destroy", lambda w: self.window2.destroy())
@@ -599,13 +672,12 @@ class PyApp:
         self.menu_items2 = (
             ( "/_File",         None,         None, 0, "<Branch>" ),
             ( "/File/_Load Stream Binary file",     "<control>O", self.load_stream_binary_file, 0, None ),
-            #( "/File/_Read Text Streams(.txt)",    "<control>T", self.read_text_stream, 0, None ),
+            ( "/File/_Load Stream Map",    "<control>T", self.load_stream_map, 0, None ),
             #( "/File/_Read Stream Map(.csv)",    "<control>O", self.read_stream_map, 0, None ),
             ( "/_Display",         None,         None, 0, "<Branch>" ),
-            ( "/_Display/_Display Text view of Current Stream",    "<control>D", self.display_text_view, 0, None ),
+            ( "/_Display/_Display Text view of Current Stream (without signatures)",    "<control>D", self.display_text_view, 0, None ),
             ( "/_Create",         None,         None, 0, "<Branch>" ),
             ( "/_Create/_Create a new cluster Stream",    "<control>N", self.create_insertion_dialog, 0, None ),
-            ( "/_Create/_Create new cluster Stream with existing Stream Map",    "<control>M", self.load_stream_map, 0, None ),
             )
         
         menubar = self.get_main_menu(self.window2, self.menu_items2)
@@ -647,21 +719,23 @@ class PyApp:
         search_val = self.df[self.df['ID']==self.current_signature]
         search_val.reset_index(drop=True, inplace=True)
         id = self.current_signature
-        sign_val = search_val['Original'][0]
+        #sign_val = search_val['Original'][0]
         sign_size = search_val['Size'][0]/8
         end_index = start_index + sign_size - 1
         
         search_val_stream = self.stream_df[self.stream_df['SID']==self.current_stream]
         stream_index = search_val_stream.index[0]
-        stream_data = self.stream_df['Original'][stream_index]
-        stream_length = len(stream_data)
-        
+        stream_length = self.stream_df['Size'][stream_index]/8
+        error_override=0
         retVal, retMessage = self.validate_signature_pattern_for_stream(id, start_index, end_index, stream_index, stream_length)        
         if(retVal):
             retValueMsg = self.message_display(message_text=retMessage, _type=gtk.MESSAGE_ERROR, buttons=(gtk.BUTTONS_OK_CANCEL))
             #Stop if user presses cancel
             if retValueMsg==-6:
                 return 1
+            else:
+                error_override=1
+                end_index = int(stream_length-1)
         elif(retVal==0 and len(retMessage)>0):
             retValueMsg = self.message_display(message_text=retMessage, _type=gtk.MESSAGE_WARNING, buttons=(gtk.BUTTONS_OK_CANCEL))
             if retValueMsg==-6:
@@ -669,10 +743,10 @@ class PyApp:
         
         #Update records
         #Check if value is -1 for intitial condition
-        if(self.history_index[stream_index][0]==[-1, -1, -1]):
-            self.history_index[stream_index] = [[id, start_index, end_index]]
+        if(self.history_index[stream_index][0]==[-1, -1, -1, -1]):
+            self.history_index[stream_index] = [[id, start_index, end_index, error_override]]
         else:
-            self.history_index[stream_index].append([id, start_index, end_index])        
+            self.history_index[stream_index].append([id, start_index, end_index, error_override])        
         
         #Create an entry in the dictionary for size
         if(self.size_history.has_key(sign_size)):
@@ -681,45 +755,36 @@ class PyApp:
             self.size_history[sign_size] = 1
         
         #Update Stream to new value
+        """
         stream_data = stream_data[0:start_index] + sign_val + stream_data[end_index+1:]
         self.stream_df['Original'][stream_index] = stream_data
         self.stream_df['Hex'][stream_index] = stream_data.encode("hex")
+        """
         
         hist_linear = self.SgnPosition[stream_index].get_label()
-        hist_linear +='('+str(id)+':'+str(start_index)+'-'+str(end_index)+') '
-        
+        if not error_override:
+            hist_linear +='('+str(id)+':'+str(start_index)+'-'+str(end_index)+') '
+        else:
+            hist_linear +='<span color="red">('+str(id)+':'+str(start_index)+'-'+str(end_index)+') </span>'
         hist_newline = self.History.get_label()
         hist_newline +=str(self.current_stream)+': '+str(id)+'-->'+str(start_index)+', '+str(end_index)+'\n'
-            
-        """
-        for i in self.history_index[stream_index]:
-            hist_linear +='('+str(i[0])+': '+str(i[1])+'-'+str(i[2])+') '
-            hist_newline +=str(self.current_stream)+': '+str(i[0])+'-->'+str(i[1])+', '+str(i[2])+'\n'
-        """
         self.update_Stream_GUI(SID=None, Size_Stream=None, Select_Stream=None, SgnPosition=hist_linear, History=hist_newline, index=stream_index)
         
     def undo_insert(self, widget):
         search_val_stream = self.stream_df[self.stream_df['SID']==self.current_stream]
         stream_index = search_val_stream.index[0]
         
-        if(len(self.history_index[stream_index])>0 and self.history_index[stream_index]!=[[-1, -1, -1]]):            
+        if(len(self.history_index[stream_index])>0 and self.history_index[stream_index]!=[[-1, -1, -1, -1]]):            
             undo_data = self.history_index[stream_index][-1]
             start_index = undo_data[1]
             end_index = undo_data[2]
             sign_size = end_index - start_index + 1
-            stream_copy_data = self.stream_df_copy['Original'][stream_index]
-            stream_data = self.stream_df['Original'][stream_index]
-            changed_data = stream_copy_data[start_index:end_index+1]
             
-            #Update Stream to new value
-            stream_data = stream_data[0:start_index] + changed_data + stream_data[end_index+1:]
-            self.stream_df['Original'][stream_index] = stream_data
-            self.stream_df['Hex'][stream_index] = stream_data.encode("hex")
             self.history_index[stream_index] = self.history_index[stream_index][:-1]
             
             #Reset value if no signatures are left
             if len(self.history_index[stream_index])==0:
-                self.history_index[stream_index]=[[-1, -1, -1]]
+                self.history_index[stream_index]=[[-1, -1, -1, -1]]
                 
             #Update Size dictionary
             #Create an entry in the dictionary for size
@@ -730,16 +795,14 @@ class PyApp:
             hist_newline = self.History.get_label()
             hist_newline +='Undo of '+str(self.current_stream)+': '+str(undo_data[0])+'-->'+str(undo_data[1])+', '+str(undo_data[2])+'\n'
             
-            """
-            hist_linear = self.SgnPosition[stream_index].get_label()
-            hist_linear +='('+str(id)+': '+str(start_index)+'-'+str(end_index)+') '
-            """
-            
             hist_linear = ''
             #If not default value
-            if(self.history_index[stream_index]!=[[-1, -1, -1]]):
+            if(self.history_index[stream_index]!=[[-1, -1, -1, -1]]):
                 for i in self.history_index[stream_index]:
-                    hist_linear +='('+str(i[0])+':'+str(i[1])+'-'+str(i[2])+') '
+                    if(i[3]<1):
+                        hist_linear +='('+str(i[0])+':'+str(i[1])+'-'+str(i[2])+') '
+                    else:
+                        hist_linear +='<span color="red">('+str(i[0])+':'+str(i[1])+'-'+str(i[2])+') </span>'
             
             self.update_Stream_GUI(SID=None, Size_Stream=None, Select_Stream=None, SgnPosition=hist_linear, History=hist_newline, index=stream_index)
                         
@@ -747,42 +810,12 @@ class PyApp:
             self.message_display("No more data to perform undo")
     
     def update_index(self, widget):
-        stream_index = self.stream_df[self.stream_df['SID']==self.current_stream].index[0]
-        if(stream_index+1<self.current_index):
-            self.update_Stream_GUI(SID=None, Size_Stream=None, Select_Stream=True, SgnPosition=None, History=None, index=stream_index+1)
-            
-    def generate_stream_input(self, widget):
-        size_arr = []
-        sorted_size = sorted(self.size_history.items(), key=operator.itemgetter(0), reverse=True)
-        for i in sorted_size:
-            if i[1]>0:
-                #Convert to bits
-                size_arr.append(i[0]*8)
-        #size_arr = sorted(size_arr, reverse=True)
-        
-        if(len(size_arr)==1):
-            Load_Line = 'L,'+str(size_arr[0])+',0,0,0,0'
-        elif(len(size_arr)==2):
-            Load_Line = 'L,'+str(size_arr[0])+',0,0,0,'+str(size_arr[1])
-        elif(len(size_arr)==3):
-            Load_Line = 'L,'+str(size_arr[0])+',0,0,'+str(size_arr[1])+','+str(size_arr[2])
-        elif(len(size_arr)==4):
-            Load_Line = 'L,'+str(size_arr[0])+',0,'+str(size_arr[1])+','+str(size_arr[2])+','+str(size_arr[3])
-        else:
-            Load_Line = 'L,'+str(size_arr[0])+','+str(size_arr[1])+','+str(size_arr[2])+','+str(size_arr[3])+','+str(size_arr[4])
-        
-        self.stream_df['SID'] = self.stream_df['SID'].astype(int)
-        self.stream_df['Size'] = self.stream_df['Size'].astype(int)
-        
-        self.message_display("Please choose a location to save the Stream Input file(.csv)", _type=gtk.MESSAGE_INFO)    
-        file_location = self.save_signature(widget, data=None, save_default_df=False, df=self.stream_df, header=True)
-        
-        for line in fileinput.input(file_location, inplace=True):
-            if 'SID' in line:
-                print Load_Line
-            else:
-                print line.strip('\n')
-    
+        try:
+            stream_index = self.stream_df[self.stream_df['SID']==self.current_stream].index[0]
+            if(stream_index+1<self.current_index):
+                self.update_Stream_GUI(SID=None, Size_Stream=None, Select_Stream=True, SgnPosition=None, History=None, index=stream_index+1)
+        except:
+            pass
         
     def add_new_stream(self, SID, Stream):
         
@@ -851,9 +884,15 @@ class PyApp:
     
     def save_binary_stream_output(self, widget, data):
         stream_df_map = pd.DataFrame(columns = ['SID', 'Size', 'Hex', 'Pattern'])
+        
         for ctr in range(self.current_index):
+            SID = self.stream_df['SID'][ctr]
+            Size_stream = self.stream_df['Size'][ctr]
+            stream_data = self.stream_df['Original'][ctr]
             pattern_data = self.SgnPosition[ctr].get_text()
             if(pattern_data!=''):
+                pattern_data = pattern_data.replace('<span color="red">', '')
+                pattern_data = pattern_data.replace('</span>', '')
                 pattern_data = pattern_data.split(' ')[:-1]
                 pattern_val = str(len(pattern_data))+','
                 for i in pattern_data:
@@ -862,16 +901,24 @@ class PyApp:
                     i=i.strip(')')
                     i=i.split(':')
                     ID = i[0]
-                    S_Index = i[1].split('-')[0]
-                    E_Index = i[1].split('-')[1]
+                    S_Index = int(i[1].split('-')[0])
+                    E_Index = int(i[1].split('-')[1])
                     pattern_val+=str(ID)+','+str(S_Index)+','+str(E_Index)+','
+                    
+                    #Insert signature into stream
+                    search_val = self.df[self.df['ID']==int(ID)]
+                    search_val.reset_index(drop=True, inplace=True)
+                    sign_val = search_val['Original'][0]
+                    
+                    stream_data = stream_data[0:S_Index] + sign_val + stream_data[E_Index+1:]
+                    stream_data = stream_data[:int(Size_stream)/8]
+                    
                 #Remove trailing ,
                 pattern_val = pattern_val[:-1]
             else:
                 pattern_val = r"0"
-            SID = self.stream_df['SID'][ctr]
-            Size_stream = self.stream_df['Size'][ctr]
-            Hex = self.stream_df['Hex'][ctr]
+            
+            Hex = stream_data.encode('hex')
             
             stream_df_map.loc[ctr]=[SID, Size_stream, Hex, str(pattern_val)]
         
@@ -912,6 +959,7 @@ class PyApp:
     
     def save_stream_map(self, widget, data):
         stream_df_map = pd.DataFrame(columns = ['SID', 'Stream_Size', 'ID', 'Start_index', 'End_Index'])
+        
         idx=0
         for ctr in range(self.current_index):
             SID = self.stream_df['SID'][ctr]
@@ -929,16 +977,19 @@ class PyApp:
                     E_Index = i[1].split('-')[1]
                     stream_df_map.loc[idx]=[SID, Size_stream, ID, S_Index, E_Index]
                     idx=idx+1     
-        
+            else:
+                stream_df_map.loc[idx]=[SID, Size_stream, -1, -1, -1]
+                idx=idx+1
+                
         stream_df_map['SID'] = stream_df_map['SID'].astype(int)
         stream_df_map['Stream_Size'] = stream_df_map['Stream_Size'].astype(int)
         stream_df_map['ID'] = stream_df_map['ID'].astype(int)
         stream_df_map['Start_index'] = stream_df_map['Start_index'].astype(int)
         stream_df_map['End_Index'] = stream_df_map['End_Index'].astype(int)
         
-        self.save_signature(widget, data=None, save_default_df=False, df=stream_df_map, header=False)
-    
-    def create_insertion_dialog(self, widget, data):
+        file_location = self.save_signature(widget, data=None, save_default_df=False, df=stream_df_map, header=False)
+            
+    def create_insertion_dialog(self, widget, data, undoButton=True):
         """Function to create signature insertion dialog box"""
         if(hasattr(self,'current_signature')!=1):
             self.message_display("Please open the Signature window before proceeding further!", _type=gtk.MESSAGE_ERROR)
@@ -979,9 +1030,10 @@ class PyApp:
         dialog.vbox.pack_start(button)
         button.connect("clicked", self.insert_signature, entry)
         
-        button2 = gtk.Button("Undo Insert")
-        dialog.vbox.pack_start(button2)
-        button2.connect("clicked", self.undo_insert)
+        self.undo_button = gtk.Button("Undo Insert")
+        dialog.vbox.pack_start(self.undo_button)
+        self.undo_button.connect("clicked", self.undo_insert)
+        self.undo_button.set_sensitive(undoButton)
         
         button3 = gtk.Button("Done with current stream")
         dialog.vbox.pack_start(button3)
@@ -1023,10 +1075,16 @@ class PyApp:
         
         #Create global variables for tracking history
         self.current_stream = 0
-        self.history_index = [[[-1, -1, -1]]] * MAX_COUNT_STREAMS
+        self.history_index = [[[-1, -1, -1, -1]]] * MAX_COUNT_STREAMS
         self.size_history = {}
         self.current_index = 0
         self.stream_df = pd.DataFrame(columns = ['SID', 'Size', 'Hex', 'Original'])
+    
+    def verify_stream(self, widget, data):
+        """Callback function to intitate verification process"""
+        dummy_df = pd.DataFrame(columns = ['Time', 'Query_Op', 'Start_Index', 'End_Index'])
+        dummy_df.loc[0]=[' ', ' ', ' ', ' ']
+        self.create_verification_window(dummy_df)
     
     def validate_signature_pattern_for_stream(self, id, start_index, end_index, stream_index, stream_size):
         """Validates if signature pattern can be used for the given stream"""
@@ -1084,8 +1142,6 @@ class PyApp:
    
     def create_signature_window(self, widget, df, si, file_location):
         
-        if(hasattr(self, 'current_stream')):
-            self.change_signature_select_line_state(True)
             
         #Retrieve Dataframe and Size dictionary
         self.df = df
@@ -1232,6 +1288,10 @@ class PyApp:
         
         self.window.show_all()
         
+        #Enable select line if stream window already present
+        if(hasattr(self, 'window2')):
+            self.change_signature_select_line_state(True)
+        
         #Verification utility
         retVal, textVal = verify_size(self.si)
         if (retVal):
@@ -1258,7 +1318,7 @@ class PyApp:
         
         button3 = gtk.Button("Stream Verification")
         main_vbox.pack_start(button3, expand = True, fill = True)
-        #button3.connect("clicked", self.update_index)
+        button3.connect("clicked", self.verify_stream, "")
         
         main_vbox.show_all()
         self.windowInit.add(main_vbox)
@@ -1369,6 +1429,13 @@ def patternGenerator(file_name="patterns.txt", size_arr = [], min_n_lengths=MIN_
     except:
         print "Failed to open file"
         return 1
+def interpretStats(file_location="stats.csv"):
+    try:
+        csv_data = pd.read_csv(file_location, skiprows=[0, 1], header=None, names=['Time', 'Query_Op', 'Start_Index', 'End_Index'])
+    except Exception,e:
+        print "Failed to read file with exception" + str(e)
+        return None, 1
+    return csv_data, 0
 
 def interpretStream(read_csv=False, file_location="RandomStreams.txt"):
     """Reads the streams file and generates SID, Hex and Size parameters. 
