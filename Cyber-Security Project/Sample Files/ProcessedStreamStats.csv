@@ -1,0 +1,11 @@
+Signature Count,Full Count,True Full Count,False Full Count,Prefix Count,True Prefix Count,False Prefix Count
+4,3,3,0,1,0,1
+
+SID,Time,Query_Op,Start_Index,End_Index,Verification_Result,ID
+0,21491611 fs, L2_Q_START,0,0,,
+0,25657344 fs, L2_Q_YES_FULL,0,3,True Full,1
+0,26999611 fs, L2_Q_START,0,0,,
+0,31165344 fs, L2_Q_YES_FULL,4,7,True Full,2
+0,32507611 fs, L2_Q_START,0,0,,
+0,36673344 fs, L2_Q_YES_FULL,8,11,True Full,3
+0,47563344 fs, L1_Q_YES_PREFIX,14,15,False Prefix,
