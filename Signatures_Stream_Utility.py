@@ -2,8 +2,12 @@ import gtk, pango
 import string, random, operator, os, fileinput
 import pandas as pd
 import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib.figure import Figure as fig
+import warnings
 
 pd.options.mode.chained_assignment = None
+warnings.filterwarnings("ignore",".*GUI is implemented.*")
 
 #Constant to change utility name
 TOOL_NAME = "Signatures"
@@ -411,8 +415,194 @@ class PyApp:
                 self.message_display(message_text="Failed to create file. Please debug!")
         else:
             self.message_display(message_text="File extension must be '.txt'. Please try again!")
-        
     
+    def create_random_subset(self, widget, dialog, total_signatures, df, si):
+        warning_message = ''
+        
+        #Generate array for various sizes
+        signature_length = []
+        
+        #Record sizes to perform verification
+        size_index = {}
+        nearest_match_warning_msg = False
+        for i in range(5):
+            if(self.subset_btn[i]!=None and self.subset_btn[i].state):
+                #Append Byte size of Signature length
+                try:
+                    size_val = int(self.subset_size_entry[i].get_text())
+                    nearest_match = min(si, key=lambda x:abs(x-size_val))
+                    if(size_val!=nearest_match and nearest_match_warning_msg==False):
+                        warning_message+='Exact signature match not found in file. Nearest approximation was taken.\n'
+                        nearest_match_warning_msg = True
+                        
+                    signature_length.append(nearest_match)
+                    size_index[nearest_match]=si[nearest_match]
+                except:
+                    self.message_display("Non-integer value passed as length. Please recheck signature lengths.")
+                    return 0
+        
+        #Verify the sizes entered in the dialog box
+        if(len(size_index)>0):
+            retVal, textVal = verify_size(size_index)
+            if (retVal):
+                self.message_display("Signatures have the following error(s):\n"+textVal+'\nFile not created. Please try again!')
+                return 0
+        else:
+            self.message_display("None of the check-boxes were enabled. Please choose at least one signature length.")
+            return 0
+        
+        try:
+            total_sign_count = int(total_signatures.get_text())
+        except:
+            self.message_display("Non-integer value passed as total number of signatures.")
+            return 0
+        dialog.destroy()
+        actual_sign_count = sum(size_index.values())
+        
+        #If the actual number of signatures is less than the desired signatures, just take everything
+        if(actual_sign_count<total_sign_count):
+            warning_message+='Actual number of signatures less than desired number of signatures.\n'
+            query_str = ''
+            for i in signature_length:
+                query_str+='Size == ' + str(i) + ' | '
+            query_str = query_str[:-3]
+            new_df = df.query(query_str)
+        #If we have to eliminate some signatures, assign count based 
+        #on a round robin fashion to ensure some representation for all signatures
+        else:
+            actual_size_index = dict.fromkeys(size_index, 0)
+            current_idx = 0
+            while(total_sign_count>0):
+                current_signature = signature_length[current_idx]
+                if(size_index[current_signature]>0):
+                    actual_size_index[current_signature]+=1
+                    size_index[current_signature]-=1
+                    total_sign_count -= 1
+                current_idx += 1
+                if(current_idx==5):
+                    current_idx = 0
+                
+            first_time_flag = True
+            for signature_length_val, signature_count in actual_size_index.iteritems():
+                df_splice = df.loc[df['Size'] == signature_length_val][:signature_count]
+                if(first_time_flag):
+                    new_df = df_splice
+                    first_time_flag = False
+                else:
+                    new_df = new_df.append(df_splice, ignore_index=True)
+        
+        new_df.drop('Original', axis=1, inplace=True)
+        if(len(warning_message)>0):
+            self.message_display(warning_message, _type=gtk.MESSAGE_WARNING)
+        file_location = self.save_signature(widget, data=None, save_default_df=False, df=new_df, header=False)
+        if(file_location!=None and len(file_location)>0):
+            self.window.destroy()
+            df, si, retVal = interpretPattern(read_csv=True, file_location=file_location)
+            if(~retVal):
+                self.create_signature_window(widget, df, si, file_location)
+            else:
+                self.message_display("Failed to read file. Please verify the file contents.")
+          
+        
+    def generate_random_subset(self, widget, data):
+        """Function to generate a random subset from a CSV file of existing signatures"""
+        file_location = self.read_from_file(widget, data, message="Open Signature CSV", file_type="csv")
+        #file_location = 'C:\Users\sanke\workspace\PythonDev\snortDB_50.csv'
+        try:
+            if(file_location!=None and len(file_location)>0):
+                dialog = gtk.Dialog(title="Generate a random subset of existing Signatures", parent=None, 
+                                flags=gtk.DIALOG_MODAL|gtk.DIALOG_NO_SEPARATOR)
+                dialog.set_default_response(gtk.RESPONSE_OK)
+                dialog.set_default_size(400,300)
+                df, si, retVal = interpretPattern(read_csv=True, file_location=file_location)
+                if(retVal):
+                    self.message_display("Failed to read file. Please verify the file contents.")
+                    return 1
+                HBox = [None]*5
+                VBox = [None]*5
+                Label = [None]*5
+                self.subset_size_entry = [None]*5
+                self.subset_btn = [None]*5
+                tooltips = gtk.Tooltips()
+                
+                VBoxTotal = gtk.VBox()
+                HBoxTotal = gtk.HBox()
+                LabelTotal = gtk.Label("Total number of Signatures")
+                EntryTotal = gtk.Entry()
+                EntryTotal.set_width_chars(4)
+                EntryTotal.set_alignment(1)
+                EntryTotal.select_region(0,3)
+                HBoxTotal.pack_start(LabelTotal, padding=10)
+                HBoxTotal.pack_start(EntryTotal, padding=5)
+                VBoxTotal.pack_start(HBoxTotal)
+                dialog.vbox.pack_start(VBoxTotal)
+                
+                for i in range(0, 5):
+                    HBox[i] = gtk.HBox()
+                    VBox[i] = gtk.VBox()
+                    Label[i] = gtk.Label("Size "+str(i+1))                    
+                    self.subset_size_entry[i] = gtk.Entry()
+                    self.subset_size_entry[i].set_width_chars(4)
+                    self.subset_size_entry[i].set_alignment(1)
+                    
+                    HBox[i].pack_start(Label[i])
+                    HBox[i].pack_start(self.subset_size_entry[i])
+                    self.subset_btn[i] = gtk.CheckButton()
+                    
+                    tooltips.set_tip(self.subset_size_entry[i], "Choose the signature size in bits or pick from graph")
+                    tooltips.set_tip(self.subset_btn[i], "Check to enable creation")
+                    
+                    HBox[i].pack_start(self.subset_btn[i], False, False, padding = 5)
+                    VBox[i].pack_start(HBox[i])
+                    dialog.vbox.pack_start(VBox[i])
+                
+                VBoxL = gtk.VBox()
+                HBoxL = gtk.HBox()
+                button = gtk.Button("Pick sizes using Bar graph")
+                self.idx_subset = 0
+                button.connect("clicked", self.generate_bar_plot_for_subset, si)        
+                button2 = gtk.Button("Generate")
+                button2.connect("clicked", self.create_random_subset, dialog, EntryTotal, df, si)
+                HBoxL.pack_start(button, padding=10)
+                HBoxL.pack_start(button2, padding=10)
+                VBoxL.pack_start(HBoxL)
+                dialog.vbox.pack_start(VBoxL)
+                
+                dialog.vbox.show_all()
+                response = dialog.run()
+                
+                dialog.destroy()
+                
+        except:
+            self.message_display("Failed to read file. Please check if it matches specifications and try again!")
+            return 1
+        
+    def generate_bar_plot_for_subset(self, widget, si):
+        """Generates a bar plot for displaying size information neatly"""
+        size_arr = si.keys()
+        value_arr = si.values()
+        plt.title("Size Distribution Graph (Click on a size to select for dialog box)")
+        plt.xlabel("Size (in bits)")
+        plt.ylabel("Count")
+        plt.ion()
+        plt.show()
+        plt.bar(size_arr, value_arr, width=7, picker=True)
+        def select_plot(event):
+            plt.pause(0.001)
+            x_axis = event.artist._x
+            nearest_match = min(si, key=lambda x:abs(x-x_axis))
+            self.subset_size_entry[self.idx_subset].set_text(str(nearest_match))
+            if(self.subset_btn[self.idx_subset]!=None and self.subset_btn[self.idx_subset].state==False):
+                self.subset_btn[self.idx_subset].clicked()
+            self.idx_subset+=1
+            if(self.idx_subset==5):
+                self.idx_subset=0
+            self.subset_size_entry[self.idx_subset].select_region(0,4)
+            
+        plt.connect('pick_event', select_plot)
+        
+
+        
     def generate_pattern(self, widget, data):
         """Callback function to create dialog to generate random patterns"""
         dialog = gtk.Dialog(title="Generate Random Text for Signatures", parent=None, 
@@ -706,7 +896,7 @@ class PyApp:
             self.window4.destroy()
         config_df = pd.DataFrame(columns = ['SID', 'Size', 'Hex', 'Pattern', 'SLR', 'L1', 'L2'])
         file_location = self.read_from_file(widget, data, message="Open Binary Stream output File", file_type="csv")
-        self.window4.set_title("Stream Configuration Window | "+str(file_location))
+        self.window4.set_title("Filter Configuration | "+str(file_location))
         idx=-1
         with open(file_location, 'r+') as f:
             for line in f:
@@ -891,11 +1081,11 @@ class PyApp:
         self.table_configuration.show()
         
     def create_configuration_window(self, widget, data, streams_df):
-        """Creates Window 4 for Stream configuration before generating binary"""
+        """Creates Window 4 for Filter configuration before generating binary"""
         self.window4 = gtk.Window(gtk.WINDOW_TOPLEVEL)
         self.window4.connect("destroy", lambda w: self.window4.destroy())
         self.window4.connect("delete_event", self.delete_configuration_window)
-        self.window4.set_title("Stream Configuration Window")
+        self.window4.set_title("Filter Configuration Window")
         self.window4.set_default_size(640, 480)
         
         self.config_df = streams_df
@@ -917,7 +1107,7 @@ class PyApp:
         menubar.show()
         
         dataBox = gtk.VBox(spacing=30)
-        frame = gtk.Frame("Stream Configuration")
+        frame = gtk.Frame("Filter Configuration")
         
         #Create scrollable display
         scrolledWin = gtk.ScrolledWindow()
@@ -1697,7 +1887,8 @@ class PyApp:
             ( "/_Display",      None,         None, 0, "<Branch>" ),
             ( "/Display/_Display Text View of Signatures",  "<control>D", self.display_original_text, 0, None ),
             ( "/_Generate",         None,         None, 0, "<Branch>" ),
-            ( "/Generate/Generate Random Text Signatures",   None, self.generate_pattern, 0, None ),
+            ( "/Generate/Generate random Text Signatures",   None, self.generate_pattern, 0, None ),
+            ( "/Generate/Generate a random subset of existing Signatures",   None, self.generate_random_subset, 0, None ),
             ( "/_Construct",         None,         None, 0, "<Branch>" ),
             ("/_Construct/Construct Stream",   None, self.construct_stream, 0, None ),
             #( "/_View",         None,         None, 0, "<Branch>" ),
@@ -1804,9 +1995,16 @@ class PyApp:
                 else:
                     label = gtk.Label(str(sorted_size[j-1][i]))
                 table2.attach(label, i, i+1, j, j+1)
-        frame.add(table2)            
-        
-        sizeBox.pack_start(frame,  expand = False, fill = True, padding = 20)
+        if(len(si)<6):
+            frame.add(table2)            
+            sizeBox.pack_start(frame,  expand = False, fill = True, padding = 20)
+        else:
+            scrolledWin = gtk.ScrolledWindow()
+            scrolledWin.set_policy(gtk.POLICY_AUTOMATIC, gtk.POLICY_AUTOMATIC)
+            scrolledWin.add_with_viewport(table2)
+            frame.add(scrolledWin)
+            scrolledWin.show()
+            sizeBox.pack_start(frame,  expand = False, fill = True, padding = 20)
         
         #Arrange all the elements legibly
         self.window.add(main_vbox)
@@ -1822,7 +2020,10 @@ class PyApp:
         #Verification utility
         retVal, textVal = verify_size(self.si)
         if (retVal):
-            self.message_display("Signatures have the following error(s):\n"+textVal)
+            if(textVal.count("\n")<21):
+                self.message_display("Signatures have the following error(s):\n"+textVal)
+            else:
+                self.message_display("More than 20 errors detected. Please re-check the database.")
             
     def __init__(self):
         """
@@ -1846,7 +2047,7 @@ class PyApp:
         main_vbox.pack_start(button2, expand = True, fill = True)
         button2.connect("clicked", self.construct_stream, "")
         
-        button21 = gtk.Button("Binary Stream Configuration")
+        button21 = gtk.Button("Filter Configuration")
         main_vbox.pack_start(button21, expand = True, fill = True)
         dummy_df = pd.DataFrame(columns = ['SID', 'Size', 'Hex', 'Pattern', 'SLR', 'L1', 'L2'])
         dummy_df.loc[0]=['', '', '', '', '', 0, 0]
@@ -2111,7 +2312,7 @@ def interpretPattern(read_csv=False, file_location="patterns.txt"):
             print "Failed to read file with exception" + str(e)
             return None, None, 1
         
-    proc_data = pd.DataFrame(-1, index=np.arange(0, 1000), columns = ['ID', 'Size', 'Hex', 'Original'])
+    proc_data = pd.DataFrame(-1, index=np.arange(0, 5000), columns = ['ID', 'Size', 'Hex', 'Original'])
     #proc_data['Hex']=''
     #proc_data['Original']=''
     size_index = {}
