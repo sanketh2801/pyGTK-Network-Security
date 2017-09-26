@@ -4,7 +4,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.figure import Figure as fig
-import warnings
+import warnings, csv, os
 
 pd.options.mode.chained_assignment = None
 warnings.filterwarnings("ignore",".*GUI is implemented.*")
@@ -361,6 +361,10 @@ class PyApp:
                     save_df.to_csv(save_filename, index=False, header=header)
                     self.message_display(message_text="Successfully created "+save_filename, _type=gtk.MESSAGE_INFO)
                     dialog.destroy()
+                    if save_default_df:
+                        retValue = self.message_display("Would you like to save statistics for the signature(s)?", _type=gtk.MESSAGE_QUESTION, buttons=(gtk.BUTTONS_YES_NO))
+                        if retValue==-8:
+                            self.save_signature_stats(save_filename)
                     return save_filename
                 #Exception Handling in case file save fails
                 except:
@@ -373,6 +377,49 @@ class PyApp:
             dialog.destroy()
         
         elif response == gtk.RESPONSE_CANCEL:
+            dialog.destroy()
+    
+    def save_signature_stats(self, file_location):
+        """Saves signature stats in another file"""
+        dialog = gtk.FileChooserDialog("Save File",
+                           None,
+                           gtk.FILE_CHOOSER_ACTION_SAVE,
+                           (gtk.STOCK_CANCEL, gtk.RESPONSE_CANCEL,
+                            gtk.STOCK_SAVE, gtk.RESPONSE_OK))
+        dialog.set_default_response(gtk.RESPONSE_OK)   
+        dialog.set_current_folder(os.getcwd())
+        file_location = "".join((file_location.split('.'))[:-1]) + '_stats.csv'
+        file_location = file_location.split('\\')[-1]
+        dialog.set_current_name(file_location)
+        
+        #Create a filter to show only csv files
+        _filter = gtk.FileFilter()
+        _filter.set_name("CSV Only")
+        _filter.add_pattern("*.csv")
+        dialog.add_filter(_filter)  
+        
+        response = dialog.run()
+        if response == gtk.RESPONSE_OK:
+            file_location = dialog.get_filename()
+            if file_location.endswith('.csv'):
+                try:
+                    file_str = 'Size,Count\n'
+                    for signature_length, count in self.si.iteritems():
+                        file_str+=str(signature_length)+','+str(count)+'\n'
+                    with open(file_location, 'wb') as f:
+                        f.write(file_str)
+                    self.message_display(message_text="Successfully created "+file_location, _type=gtk.MESSAGE_INFO)
+                    dialog.destroy()
+                #Exception Handling in case file save fails
+                except:
+                    dialog.destroy()
+                    self.message_display(message_text="Failed to create file. Please debug!")
+                    
+            else:
+                self.message_display(message_text="File extension must be '.csv'. Please try again!")
+                dialog.destroy()
+                self.save_signature_stats(file_location)
+        else:
             dialog.destroy()
             
     def generate(self, widget, Spin_Btn, Btn, Spin_Btn_Count ,entry):
@@ -424,6 +471,7 @@ class PyApp:
         
         #Record sizes to perform verification
         size_index = {}
+        
         nearest_match_warning_msg = False
         for i in range(5):
             if(self.subset_btn[i]!=None and self.subset_btn[i].state):
@@ -433,7 +481,10 @@ class PyApp:
                     nearest_match = min(si, key=lambda x:abs(x-size_val))
                     if(size_val!=nearest_match and nearest_match_warning_msg==False):
                         warning_message+='Exact signature match not found in file. Nearest approximation was taken.\n'
+                        warning_message+=size_val+' was replaced with '+nearest_match+'\n'
                         nearest_match_warning_msg = True
+                    elif(size_val!=nearest_match and nearest_match_warning_msg==True):
+                        warning_message+=size_val+' was replaced with '+nearest_match+'\n'
                         
                     signature_length.append(nearest_match)
                     size_index[nearest_match]=si[nearest_match]
@@ -450,7 +501,9 @@ class PyApp:
         else:
             self.message_display("None of the check-boxes were enabled. Please choose at least one signature length.")
             return 0
-        
+        if(len([x for x in signature_length if signature_length.count(x) >= 2])>0):
+            self.message_display("Duplicate signature lengths are not allowed. Please choose unique signature lengths.")
+            return 0
         try:
             total_sign_count = int(total_signatures.get_text())
         except:
@@ -461,7 +514,7 @@ class PyApp:
         
         #If the actual number of signatures is less than the desired signatures, just take everything
         if(actual_sign_count<total_sign_count):
-            warning_message+='Actual number of signatures less than desired number of signatures.\n'
+            warning_message+='Actual number of signatures('+str(actual_sign_count)+') less than desired number of signatures('+str(total_sign_count)+').\n'
             query_str = ''
             for i in signature_length:
                 query_str+='Size == ' + str(i) + ' | '
@@ -479,7 +532,7 @@ class PyApp:
                     size_index[current_signature]-=1
                     total_sign_count -= 1
                 current_idx += 1
-                if(current_idx==5):
+                if(current_idx==len(size_index)):
                     current_idx = 0
                 
             first_time_flag = True
@@ -545,6 +598,7 @@ class PyApp:
                     self.subset_size_entry[i].set_width_chars(4)
                     self.subset_size_entry[i].set_alignment(1)
                     
+                    
                     HBox[i].pack_start(Label[i])
                     HBox[i].pack_start(self.subset_size_entry[i])
                     self.subset_btn[i] = gtk.CheckButton()
@@ -576,7 +630,8 @@ class PyApp:
         except:
             self.message_display("Failed to read file. Please check if it matches specifications and try again!")
             return 1
-        
+    
+    
     def generate_bar_plot_for_subset(self, widget, si):
         """Generates a bar plot for displaying size information neatly"""
         size_arr = si.keys()
@@ -598,6 +653,14 @@ class PyApp:
             if(self.idx_subset==5):
                 self.idx_subset=0
             self.subset_size_entry[self.idx_subset].select_region(0,4)
+            self.subset_size_entry[self.idx_subset].drag_highlight()
+            self.subset_btn[self.idx_subset].drag_highlight()
+            if(self.idx_subset>0):
+                self.subset_size_entry[self.idx_subset-1].drag_unhighlight()
+                self.subset_btn[self.idx_subset-1].drag_unhighlight()
+            else:
+                self.subset_size_entry[4].drag_unhighlight()
+                self.subset_btn[4].drag_unhighlight()
             
         plt.connect('pick_event', select_plot)
         
@@ -1903,7 +1966,7 @@ class PyApp:
         #Create partition for Data display
         dataBox = gtk.VBox(spacing=30)
         frame = gtk.Frame("Pattern Values")
-        
+
         #Create scrollable display.
         #Scrollability policy based on number of elements.
         scrolledWin = gtk.ScrolledWindow()
@@ -2023,7 +2086,9 @@ class PyApp:
             if(textVal.count("\n")<21):
                 self.message_display("Signatures have the following error(s):\n"+textVal)
             else:
-                self.message_display("More than 20 errors detected. Please re-check the database.")
+                with open('error.log', 'wb') as f:
+                    f.write(textVal)
+                self.message_display("More than 20 errors detected. Please check "+os.getcwd()+"\\error.log for the full list")
             
     def __init__(self):
         """
@@ -2083,7 +2148,7 @@ def verify_size(size_index):
     
     for i in range(len(sorted_size)):
         if len(sorted_size)==1:
-            min_check = MIN_SIZE_SIGNATURE - 1
+            min_check = MIN_SIZE_SIGNATURE - 8
         else:
             min_check = MIN_SIZE_SIGNATURE
         
@@ -2093,10 +2158,10 @@ def verify_size(size_index):
         
         if sorted_size[i][0]>MAX_SIZE_SIGNATURE:
             flag=1
-            ErrorMessage+= "Signature length greater than: "+str(MAX_SIZE_SIGNATURE)+"\n"
+            ErrorMessage+= 'Signature length ('+str(sorted_size[i][0])+') greater than: '+str(MAX_SIZE_SIGNATURE)+'\n'
         elif sorted_size[i][0]<min_check:
             flag=1
-            ErrorMessage+= "Signature length less than: "+str(MIN_SIZE_SIGNATURE)+"\n"
+            ErrorMessage+= "Signature length ("+str(sorted_size[i][0])+") less than: "+str(MIN_SIZE_SIGNATURE)+"\n"
         
         if(i==0):
             previous_val=sorted_size[0][0]
@@ -2104,7 +2169,7 @@ def verify_size(size_index):
         
         if(sorted_size[i][0]-previous_val<DISTANCE_CONSECUTIVE):
             flag=1
-            ErrorMessage+= "Distance between consecutive signatures less than: "+str(DISTANCE_CONSECUTIVE)+"\n"
+            ErrorMessage+= "Distance between consecutive signatures ("+str(sorted_size[i][0]-previous_val)+") less than: "+str(DISTANCE_CONSECUTIVE)+"\n"
         
         previous_val=sorted_size[i][0]
     
