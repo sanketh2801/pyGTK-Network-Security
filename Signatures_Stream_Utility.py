@@ -5,6 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.figure import Figure as fig
 import warnings, csv, os
+from bokeh.core.validation.decorators import warning
 
 pd.options.mode.chained_assignment = None
 warnings.filterwarnings("ignore",".*GUI is implemented.*")
@@ -480,11 +481,11 @@ class PyApp:
                     size_val = int(self.subset_size_entry[i].get_text())
                     nearest_match = min(si, key=lambda x:abs(x-size_val))
                     if(size_val!=nearest_match and nearest_match_warning_msg==False):
-                        warning_message+='Exact signature match not found in file. Nearest approximation was taken.\n'
-                        warning_message+=size_val+' was replaced with '+nearest_match+'\n'
+                        warning_message+='Exact signature size not found in file. Nearest approximation was taken.\n'
+                        warning_message+=str(size_val)+' was replaced with '+str(nearest_match)+'\n'
                         nearest_match_warning_msg = True
                     elif(size_val!=nearest_match and nearest_match_warning_msg==True):
-                        warning_message+=size_val+' was replaced with '+nearest_match+'\n'
+                        warning_message+=str(size_val)+' was replaced with '+str(nearest_match)+'\n'
                         
                     signature_length.append(nearest_match)
                     size_index[nearest_match]=si[nearest_match]
@@ -496,14 +497,22 @@ class PyApp:
         if(len(size_index)>0):
             retVal, textVal = verify_size(size_index)
             if (retVal):
-                self.message_display("Signatures have the following error(s):\n"+textVal+'\nFile not created. Please try again!')
-                return 0
+                if not(len(warning_message)):
+                    self.message_display("Signatures have the following error(s):\n"+textVal+'\nFile not created. Please try again!')
+                    return 0
+                else:
+                    self.message_display("Signatures have the following error(s):\n"+textVal+'\nError might be generated due to automatic substitution. Please review the substitutions: \n'+warning_message+'\nFile not created. Please try again!')
+                    return 0
         else:
             self.message_display("None of the check-boxes were enabled. Please choose at least one signature length.")
             return 0
         if(len([x for x in signature_length if signature_length.count(x) >= 2])>0):
-            self.message_display("Duplicate signature lengths are not allowed. Please choose unique signature lengths.")
-            return 0
+            if not(len(warning_message)):
+                self.message_display("Duplicate signature lengths are not allowed. Please choose unique signature lengths.")
+                return 0
+            else:
+                self.message_display("Duplicate signature lengths are not allowed. Error might be generated due to automatic substitution. Please review the substitutions: \n"+warning_message+"\nPlease pick another size for the conflicts!")
+                return 0
         try:
             total_sign_count = int(total_signatures.get_text())
         except:
@@ -546,13 +555,20 @@ class PyApp:
         
         new_df.drop('Original', axis=1, inplace=True)
         if(len(warning_message)>0):
-            self.message_display(warning_message, _type=gtk.MESSAGE_WARNING)
+            retValueMsg=self.message_display(warning_message, _type=gtk.MESSAGE_WARNING, buttons=(gtk.BUTTONS_OK_CANCEL))
+            #Stop if user presses cancel
+            if retValueMsg==-6:
+                return 1
+            
         file_location = self.save_signature(widget, data=None, save_default_df=False, df=new_df, header=False)
         if(file_location!=None and len(file_location)>0):
             self.window.destroy()
             df, si, retVal = interpretPattern(read_csv=True, file_location=file_location)
             if(~retVal):
                 self.create_signature_window(widget, df, si, file_location)
+                retValue = self.message_display("Would you like to save statistics for the signature(s)?", _type=gtk.MESSAGE_QUESTION, buttons=(gtk.BUTTONS_YES_NO))
+                if retValue==-8:
+                    self.save_signature_stats(file_location)
             else:
                 self.message_display("Failed to read file. Please verify the file contents.")
           
@@ -593,7 +609,7 @@ class PyApp:
                 for i in range(0, 5):
                     HBox[i] = gtk.HBox()
                     VBox[i] = gtk.VBox()
-                    Label[i] = gtk.Label("Size "+str(i+1))                    
+                    Label[i] = gtk.Label(" Bit Size "+str(i+1))                    
                     self.subset_size_entry[i] = gtk.Entry()
                     self.subset_size_entry[i].set_width_chars(4)
                     self.subset_size_entry[i].set_alignment(1)
@@ -913,14 +929,14 @@ class PyApp:
     
     def delete_verify_window(self, widget, data=None):
         retValue = self.message_display("Would you like to save your progress before quitting?", _type=gtk.MESSAGE_QUESTION, buttons=(gtk.BUTTONS_YES_NO))
-        if retValue==8:
+        if retValue==gtk.RESPONSE_YES:
             self.save_stats(widget, data)
         else:
             self.window3.destroy()
             
     def delete_stream_window(self, widget, data=None):
         retValue = self.message_display("Would you like to save your progress before quitting?", _type=gtk.MESSAGE_QUESTION, buttons=(gtk.BUTTONS_YES_NO))
-        if retValue==8:
+        if retValue==gtk.RESPONSE_YES:
             self.save_stream_map(widget, data)    
         else:
             self.window2.destroy()        
@@ -928,14 +944,14 @@ class PyApp:
     
     def delete_configuration_window(self, widget, data=None):
         retValue = self.message_display("Would you like to save your progress before quitting?", _type=gtk.MESSAGE_QUESTION, buttons=(gtk.BUTTONS_YES_NO))
-        if retValue==8:
+        if retValue==gtk.RESPONSE_YES:
             self.save_binary_after_config(widget, data)    
         else:
             self.window4.destroy()
         
     def delete_signature_window(self, widget, data=None):
         retValue = self.message_display("Would you like to save your progress before quitting?", _type=gtk.MESSAGE_QUESTION, buttons=(gtk.BUTTONS_YES_NO))
-        if retValue==8:
+        if retValue==gtk.RESPONSE_YES:
             self.save_signature(widget, data)
         else:
             self.window.destroy()
