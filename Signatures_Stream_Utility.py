@@ -427,7 +427,125 @@ class PyApp:
                 self.save_signature_stats(file_location)
         else:
             dialog.destroy()
-            
+
+    def create_random_subset_using_range(self, df, n_signs, rand_seed, min_sign_length, max_sign_length):
+        """Creates a random subset of signatures based on the dialogs specified through the dialog"""
+        random.seed(rand_seed)
+        subset_df = df.loc[df['Size'] >= min_sign_length*8]
+        subset_df = subset_df.loc[subset_df['Size'] <= max_sign_length*8]
+        subset_df.reset_index(drop=True, inplace=True)
+        n_available_signs = len(subset_df)
+        
+        #Generate a subset from the original dataframe of random values
+        if n_signs > n_available_signs:
+            retVal = self.message_display('Number of available signatures('+str(n_available_signs)+\
+                                          ') is less than desired number of signatures('+str(n_signs)+\
+                                          '). All signatures will be selected. Would you like to proceed?\n',\
+                                           _type=gtk.MESSAGE_QUESTION, buttons=gtk.BUTTONS_OK_CANCEL)
+            if retVal == gtk.RESPONSE_CANCEL:
+                return 1
+            random_subset = subset_df
+        else:
+            random_subset = pd.DataFrame(columns = ['ID', 'Size', 'Hex'])
+            hist_idx = []
+            for i in range(n_signs):
+                rand_idx = random.randint(0, n_available_signs-1)
+                while(rand_idx in hist_idx):
+                    rand_idx = random.randint(0, n_available_signs-1)
+                random_subset.loc[i] = [subset_df['ID'][rand_idx], subset_df['Size'][rand_idx], subset_df['Hex'][rand_idx]]
+                hist_idx.append(rand_idx)
+            random_subset['ID'] = random_subset['ID'].astype(int)
+            random_subset['Size'] = random_subset['Size'].astype(int)
+        
+        widget = None
+        file_location = self.save_signature(widget, data=None, save_default_df=False, df=random_subset, header=False)
+        if(file_location!=None and len(file_location)>0):
+            self.window.destroy()
+            df, si, retVal = interpretPattern(read_csv=True, file_location=file_location)
+            if(~retVal):
+                self.create_signature_window(widget, df, si, file_location)
+                retValue = self.message_display("Would you like to save statistics for the signature(s)?", _type=gtk.MESSAGE_QUESTION, buttons=(gtk.BUTTONS_YES_NO))
+                if retValue==-8:
+                    self.save_signature_stats(file_location)
+            else:
+                self.message_display("Failed to read file. Please verify the file contents.")
+
+    def generate_random_subset_using_range_dialog(self, widget, data):
+        """Function to take input for generating a random subset of existing Signatures"""
+        file_location = self.read_from_file(widget, data, message="Open Signature CSV", file_type="csv")
+        #file_location = 'C:\Users\sanke\workspace\PythonDev\snortDB_50.csv'
+        try:
+            if(file_location!=None and len(file_location)>0):
+                dialog = gtk.Dialog(title="Generate Random subset using Range", parent=None, 
+                                        flags=gtk.DIALOG_NO_SEPARATOR,
+                                        buttons=("Generate", gtk.RESPONSE_OK))
+                dialog.set_default_size(265, 250)
+                df, si, retVal = interpretPattern(read_csv=True, file_location=file_location)
+                HBoxI = gtk.HBox()
+                label = gtk.Label("Number of Signatures:")
+                label.set_alignment(0, 0)
+                entry1 = gtk.Entry()
+                entry1.set_text(str(len(df)))
+                entry1.set_alignment(1)
+                entry1.set_width_chars(10)
+                HBoxI.pack_start(label, padding = 15)
+                HBoxI.pack_start(entry1, expand = False, fill = False, padding=15)
+                dialog.vbox.pack_start(HBoxI, padding = 10)
+                
+                HBoxI = gtk.HBox()
+                label = gtk.Label("Random Seed:")
+                label.set_alignment(0, 0)
+                entry2 = gtk.Entry()
+                entry2.set_text(str(int(time.time())))
+                entry2.set_alignment(1)
+                entry2.set_width_chars(10)
+                HBoxI.pack_start(label, padding = 15)
+                HBoxI.pack_start(entry2, expand = False, fill = False, padding=15)
+                dialog.vbox.pack_start(HBoxI, padding = 10)
+                
+                
+                sig_size_frame = self.generate_min_max_frame_for_random_stream_map(frame_name="Allowable values for Signature lengths (bytes)",\
+                                                                                    min_val=int(min(df['Size'])/8), \
+                                                                                    max_val=int(max(df['Size'])/8))
+                dialog.vbox.pack_start(sig_size_frame, padding = 10)
+                
+                    
+                if(hasattr(self,'random_stream_subset_config')==1):
+                    entry1.set_text(str(self.random_stream_subset_config[0]))
+                    entry2.set_text(str(self.random_stream_subset_config[1]))
+                    sig_size_frame.get_children()[0].get_children()[0].get_children()[1].set_value(self.random_stream_subset_config[2])
+                    sig_size_frame.get_children()[0].get_children()[1].get_children()[1].set_value(self.random_stream_subset_config[3])
+                
+                # dialog.set_resizable(False)
+                dialog.vbox.show_all()
+                dialog.show()
+                response = dialog.run()
+                
+                if response == gtk.RESPONSE_OK:
+                    try:
+                        n_signs = int(entry1.get_text())
+                        rand_seed = int(entry2.get_text())
+                        #===============================================================
+                        #Frame->VBox->HBox1, HBox2; HBox1->Label, ScaleMin; HBox2->Label, ScaleMax 
+                        #===============================================================
+                        min_sign_length = int(sig_size_frame.get_children()[0].get_children()[0].get_children()[1].get_value())
+                        max_sign_length = int(sig_size_frame.get_children()[0].get_children()[1].get_children()[1].get_value())
+                        self.random_stream_subset_config = [n_signs, rand_seed, min_sign_length, max_sign_length]
+                        #Verify if number of streams is valid
+                        if(n_signs==0 or n_signs>len(df)):
+                            self.message_display("Please enter a valid number of signatures!")
+                            dialog.destroy()
+                            self.generate_random_subset_dialog(widget, data=None)
+                        dialog.destroy()
+                        self.create_random_subset_using_range(df, n_signs, rand_seed, min_sign_length, max_sign_length)
+                        
+                    except Exception, e:
+                        print e
+                        self.message_display("Non-integer value passed as parameter. Please re-check the input")
+        except:
+            self.message_display("Failed to read file. Please check if it matches specifications and try again!")
+            return 1
+
     def generate(self, widget, Spin_Btn, Btn, Spin_Btn_Count ,entry):
         """Callback function to parse signature random patterns"""
         #Generate array for various sizes
@@ -2085,7 +2203,7 @@ class PyApp:
         HBox2 = gtk.HBox()
         label = gtk.Label("Max:")
         label.set_alignment(0, 0)
-        lengthAdjMax = gtk.Adjustment(value=min_val, lower=min_val, upper=max_val, step_incr=1)
+        lengthAdjMax = gtk.Adjustment(value=max_val, lower=min_val, upper=max_val, step_incr=1)
         scaleMax = gtk.HScale(lengthAdjMax)
         scaleMax.set_digits(0)
         scaleMax.set_value_pos(gtk.POS_RIGHT)
@@ -2313,7 +2431,8 @@ class PyApp:
             ( "/Display/_Display Text View of Signatures",  "<control>D", self.display_original_text, 0, None ),
             ( "/_Generate",         None,         None, 0, "<Branch>" ),
             ( "/Generate/Generate random Text Signatures",   None, self.generate_pattern, 0, None ),
-            ( "/Generate/Generate a random subset of existing Signatures",   None, self.generate_random_subset, 0, None ),
+            ( "/Generate/Generate a random subset of Signatures using a graph",   None, self.generate_random_subset, 0, None ),
+            ( "/Generate/Generate a random subset of Signatures using a range",   None, self.generate_random_subset_using_range_dialog, 0, None ),
             )
         
         menubar = self.get_main_menu(self.window, self.menu_items)
@@ -2464,8 +2583,8 @@ class PyApp:
         
         button = gtk.Button(TOOL_NAME)
         main_vbox.pack_start(button, expand = True, fill = True)
-        dummy_df = pd.DataFrame(columns = ['ID', 'Size', 'Hex'])
-        dummy_df.loc[0]=['', '', '']
+        dummy_df = pd.DataFrame(columns = ['ID', 'Size', 'Hex', 'Original'])
+        dummy_df.loc[0]=['', '', '', '']
         
         self.dummy_signature_window = True
         button.connect("clicked", self.create_signature_window, dummy_df, {}, '')
@@ -2767,11 +2886,13 @@ def interpretPattern(read_csv=False, file_location="patterns.txt"):
     if(read_csv):
         try:
             csv_data = pd.read_csv(file_location, header=None, names=['ID', 'Size', 'Hex'])
+            csv_data['Original'] = csv_data.apply(lambda row: row.Hex.decode("Hex"), axis=1)
         except Exception,e:
             print "Failed to read file with exception" + str(e)
             return None, None, 1
         
-    proc_data = pd.DataFrame(-1, index=np.arange(0, 5000), columns = ['ID', 'Size', 'Hex', 'Original'])
+    proc_data = pd.DataFrame(columns = ['ID', 'Size', 'Hex', 'Original'])
+    
     #proc_data['Hex']=''
     #proc_data['Original']=''
     size_index = {}
@@ -2792,11 +2913,11 @@ def interpretPattern(read_csv=False, file_location="patterns.txt"):
                     size_index[size_line] = 1
                 
                 
-                proc_data['ID'][i] = i
-                proc_data['Hex'][i] = line.encode("Hex")
-                proc_data['Original'][i] = line
-                proc_data['Size'][i] = size_line
-                
+                # proc_data['ID'][i] = i
+                # proc_data['Hex'][i] = line.encode("Hex")
+                # proc_data['Original'][i] = line
+                # proc_data['Size'][i] = size_line
+                proc_data.loc[i] = [i, size_line, line.encode("Hex"), line] 
                 #Generate bitstream
                 #stream_data = ''.join('{0:04b}'.format(int(c, 16)) for c in proc_data['Hex'][i])
                 
@@ -2806,18 +2927,24 @@ def interpretPattern(read_csv=False, file_location="patterns.txt"):
             return None, None, 1
     
     else:
+        proc_data = csv_data
         for i in range(len(csv_data)):
-            proc_data['ID'][i] = csv_data['ID'][i]
-            proc_data['Size'][i] = csv_data['Size'][i]
-            proc_data['Hex'][i] = csv_data['Hex'][i]
-            proc_data['Original'][i] = csv_data['Hex'][i].decode("Hex")
+            # proc_data['ID'][i] = csv_data['ID'][i]
+            # proc_data['Size'][i] = csv_data['Size'][i]
+            # proc_data['Hex'][i] = csv_data['Hex'][i]
+            # proc_data['Original'][i] = csv_data['Hex'][i].decode("Hex")
+
+            # proc_data.loc[i] = [csv_data['ID'][i], csv_data['Size'][i], csv_data['Hex'][i], csv_data['Hex'][i].decode("Hex")]
             size_line = csv_data['Size'][i]
             if(size_index.has_key(size_line)):
                     size_index[size_line] += 1
             else:
                 size_index[size_line] = 1
-    
-    proc_data = proc_data[(proc_data.T != -1).any()]
+    proc_data['ID'] = proc_data['ID'].astype(int)
+    proc_data['Size'] = proc_data['Size'].astype(int)
+    proc_data['Hex'] = proc_data['Hex'].astype(str)
+    proc_data['Original'] = proc_data['Original'].astype(str)
+    # proc_data = proc_data[(proc_data.T != -1).any()]
     return proc_data, size_index, 0
 
 if __name__ == "__main__":
