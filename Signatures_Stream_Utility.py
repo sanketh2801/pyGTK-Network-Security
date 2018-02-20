@@ -1,22 +1,25 @@
+"""
+    * Usage: python Signatures_Stream_Utility.py            
+"""
 import gtk, pango
 import string, random, operator
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
-#from matplotlib.figure import Figure as fig
 import warnings, os, time
+import matplotlib.pyplot as plt
+
 
 pd.options.mode.chained_assignment = None
 warnings.filterwarnings("ignore",".*GUI is implemented.*")
 
-#Constant to change utility name
+# Constant to change utility name
 TOOL_NAME = "Signatures Dictionary Construction"
 
-#Constants to determine number of elements
+# Constants to determine number of elements
 MIN_N_LENGTHS = 1
 MAX_N_LENGTHS = 5
 
-#Constants to customize allowable signature length
+# Constants to customize allowable signature length
 MIN_SIZE_SIGNATURE = 4*8
 MAX_SIZE_SIGNATURE = 130*8
 DISTANCE_CONSECUTIVE = 2*8
@@ -35,7 +38,23 @@ ALLOWABLE_CHARS = string.ascii_letters + string.digits + string.punctuation
 class PyApp:
     
     def read_from_csv(self, widget, data):
-        """Callback function to initiate reading CSV file"""
+        """
+        Function to read file location and open signature dictionary file type. 
+        
+        returns return value
+
+        **UI Flow**:
+            * Display a dialog for opening a csv file
+            * Update UI with selected dictionary
+            
+        :param widget: Calling widget
+        :param data: Unused
+        :type widget: gtk.Widget
+        :type data: string
+        :returns: Return value
+        :rtype: int
+        
+        """
         file_location = self.read_from_file(widget, data, message="Open Signature CSV", file_type="csv")
         try:
             if(file_location!=None and len(file_location)>0):
@@ -50,7 +69,23 @@ class PyApp:
             return 1
             
     def read_from_text(self, widget, data):
-        """Callback function to initiate reading txt file"""
+        """
+        Function to read file location and open signature dictionary file type. 
+        
+        returns return value
+
+        **UI Flow**:
+            * Display a dialog for opening a txt file
+            * Update UI with selected dictionary
+            
+        :param widget: Calling widget
+        :param data: Unused
+        :type widget: gtk.Widget
+        :type data: string
+        :returns: Return value
+        :rtype: int
+        
+        """
         file_location = self.read_from_file(widget, data, message="Open Signature Text", file_type="txt")
         try:
             if(file_location!=None and len(file_location)>0):
@@ -65,7 +100,25 @@ class PyApp:
             return 1
         
     def read_csv_stats(self, widget, data):
-        """Callback function to initiate reading CSV file"""
+        """
+        Function to read csv stats file location and display it on the UI 
+        
+        returns return value
+
+        **UI Flow**:
+            * Display a dialog for opening a csv stats file
+            * Dialog box to check if STREAMS_IN.csv file from current location should be checked
+            * If no, dialog box to specify Stream binary file
+            * Update UI with selected statistics
+            
+        :param widget: Calling widget
+        :param data: Unused
+        :type widget: gtk.Widget
+        :type data: string
+        :returns: Return value
+        :rtype: int
+        
+        """
         file_location = self.read_from_file(widget, data, message="Open Stream Stats CSV", file_type="csv")
         try:
             if(file_location!=None and len(file_location)>0):
@@ -91,7 +144,23 @@ class PyApp:
             return 1
         
     def read_csv_processed_stats(self, widget, data):
-        """Callback function to initiate reading CSV file"""
+        """
+        Function to read processed csv stats file location and display it on the UI 
+        
+        returns return value
+
+        **UI Flow**:
+            * Display a dialog for opening a csv stats file
+            * Update UI with selected statistics
+            
+        :param widget: Calling widget
+        :param data: Unused
+        :type widget: gtk.Widget
+        :type data: string
+        :returns: Return value
+        :rtype: int
+        
+        """
         file_location = self.read_from_file(widget, data, message="Open processed Stream Stats CSV", file_type="csv")
         try:
             if(file_location!=None and len(file_location)>0):
@@ -112,7 +181,25 @@ class PyApp:
             return 1
             
     def load_stream_binary_file(self, widget, data):
-        """Callback function to initiate reading stream map file"""
+        """
+        Function to open filter stream output file and display it on the UI 
+        
+        returns return value
+
+        **UI Flow**:
+            * Display a dialog for opening filter stream output file
+            * Update UI with selected file
+            
+        :param widget: Calling widget
+        :param data: Unused
+        :type widget: gtk.Widget
+        :type data: string
+        :returns: Return value
+        :rtype: int
+        
+        .. note:: Function no longer used. Legacy code.
+
+        """
         #Clear old values
         for i in range(self.current_index):
             self.update_Stream_GUI(SID='', Size_Stream='', Select_Stream=False, SgnPosition='', History='', index=i)
@@ -180,8 +267,27 @@ class PyApp:
             return 1
         
     def load_stream_map(self, widget, data, file_location = None):
-        """Loads Stream map into stream construction GUI"""
-        #Clear old values
+        """
+        Function to open stream map and display it on the UI 
+        
+        returns return value
+
+        **UI Flow**:
+            * Display a dialog for opening stream map
+            * Update UI with selected file
+            * Open Stream insertion dialog
+            
+        :param widget: Calling widget
+        :param data: Unused
+        :param file_location: File location of stream map
+        :type widget: gtk.Widget
+        :type data: string
+        :type file_location: string
+        :returns: Return value
+        :rtype: int
+        
+        """
+        # Clear old values from GUI
         for i in range(self.current_index):
             self.update_Stream_GUI(SID='', Size_Stream='', Select_Stream=False, SgnPosition='', History='', index=i)
         self.stream_df = pd.DataFrame(columns = ['SID', 'Size', 'Hex', 'Original'])
@@ -191,6 +297,7 @@ class PyApp:
         self.current_index = 0
         self.close_insertion_dialog()
         
+        # Allow access to undo button for stream map
         if(hasattr(self,'undo_button')):
             self.undo_button.set_sensitive(True)
         if(file_location==None):
@@ -207,6 +314,7 @@ class PyApp:
                     Hex = Stream.encode("hex")
                     self.stream_df.loc[self.current_index]=[SID, Size_stream, Hex, Stream]
                     
+                    # Fetch index
                     search_val = stream_df_map[stream_df_map['SID']==SID]
                     search_val.reset_index(drop=True, inplace=True)
                     sign_count = len(search_val)
@@ -217,6 +325,7 @@ class PyApp:
                             S_Index = int(stream_df_map['Start_index'][j])
                             E_Index = int(stream_df_map['End_Index'][j])
                             Full_Signature = int(stream_df_map['Full_Signature'][j])
+                            # Add red color for incomplete signatures
                             if Full_Signature:
                                 SgnPosition+='('+str(ID)+':'+str(S_Index)+'-'+str(E_Index)+') '
                             else:
@@ -227,7 +336,7 @@ class PyApp:
                             else:
                                 self.history_index[self.current_index].append([ID, S_Index, E_Index, Full_Signature])
                                 
-                            #Create an entry in the dictionary for size
+                            # Create an entry in the dictionary for size
                             sign_size = E_Index - S_Index + 1
                             if(self.size_history.has_key(sign_size)):
                                 self.size_history[sign_size] += 1
@@ -243,7 +352,26 @@ class PyApp:
             return 1        
             
     def read_from_file(self, widget, data, message, file_type):
-        """Callback function to initiate reading a generic file"""
+        """
+        Function to read file location based with a message and specified file type. 
+        
+        returns File location
+
+        **UI Flow**:
+            * Display a dialog for opening a file
+            
+        :param widget: Calling widget
+        :param data: Unused
+        :param message: Title message for opening file
+        :param file_type: File type e.g. csv, txt.
+        :type widget: gtk.Widget
+        :type data: string
+        :type message: string
+        :type file_type: string
+        :returns: File location
+        :rtype: string
+
+        """
         dialog = gtk.FileChooserDialog(message,
                            None,
                            gtk.FILE_CHOOSER_ACTION_OPEN,
@@ -276,7 +404,22 @@ class PyApp:
         
     
     def display_original_text(self, widget, data):
-        """Callback function to Display Original Text Signature"""
+        """
+        Function to display original Text Signatures 
+        
+        returns None
+
+        **UI Flow**:
+            * Display a dialog box with hex to string converted signatures
+            
+        :param widget: Calling widget
+        :param data: Unused
+        :type widget: gtk.Widget
+        :type data: string
+        :returns: None
+        :rtype: None
+
+        """
         dialog = gtk.Dialog(title="Original Signatures", parent=None, 
                                 flags=gtk.DIALOG_MODAL|gtk.DIALOG_NO_SEPARATOR, 
                                 buttons=(gtk.STOCK_OK, gtk.RESPONSE_OK))
@@ -329,8 +472,30 @@ class PyApp:
             dialog.destroy()
     
     def save_signature(self, widget, data, save_default_df=True, df=None, header=False, dont_save_for_config=False):
-        """Callback function to Save the Signature.
-            Doubles as functio to save a dataframe based on customizable paramters."""
+        """
+        Function to save the dataframe in a location specified by the user 
+        Initializes GUI dialog boxes to process inputs.
+        
+        returns saved_file_location
+
+        **UI Flow**:
+            * Pick saved file location
+            * Print message with saved file location and success message
+
+        :param save_default_df: Should the default dataframe be saved?            
+        :param df: Dataframe to be saved
+        :param header: Should header be saved in the file?
+        :param dont_save_for_config: Special case for config, where file isn't saved.
+        :type save_default_df: Bool
+        :type df: pandas.Dataframe
+        :type header: Bool
+        :type dont_save_for_config: Bool
+        :returns: saved_file_location
+        :rtype: String
+
+        .. note:: Doesn't store Dataframe index by default
+
+        """
         dialog = gtk.FileChooserDialog("Save File",
                            None,
                            gtk.FILE_CHOOSER_ACTION_SAVE,
@@ -386,7 +551,22 @@ class PyApp:
             dialog.destroy()
     
     def save_signature_stats(self, file_location):
-        """Saves signature stats in another file"""
+        """
+        Function to save signature stats in a location specified by the user 
+        Initializes GUI dialog boxes to process inputs.
+        
+        returns None
+
+        **UI Flow**:
+            * Pick saved file location
+            * Print message with saved file location and success message
+
+        :param file_location: Signature save file location
+        :type file_location: string
+        :returns: None
+        :rtype: None
+
+        """
         dialog = gtk.FileChooserDialog("Save File",
                            None,
                            gtk.FILE_CHOOSER_ACTION_SAVE,
@@ -429,7 +609,28 @@ class PyApp:
             dialog.destroy()
 
     def create_random_subset_using_range(self, df, n_signs, rand_seed, min_sign_length, max_sign_length):
-        """Creates a random subset of signatures based on the dialogs specified through the dialog"""
+        """
+        Function to creates a random subset of signatures based on inputs specified through the dialog
+        
+        returns None
+        
+        :param df: Dataframe to be saved
+        :param n_signs: No. of signatures
+        :param rand_seed: Random seed
+        :param min_sign_length: Minimum signature length
+        :param max_sign_length: Maximum signature length
+        :type df: pandas.Dataframe
+        :type n_signs: int
+        :type rand_seed: int
+        :type min_sign_length: int
+        :type max_sign_length: int
+        
+        :returns: None
+        :rtype: None
+
+        .. seealso::  generate_random_subset_using_range_dialog
+        
+        """
         random.seed(rand_seed)
         subset_df = df.loc[df['Size'] >= min_sign_length*8]
         subset_df = subset_df.loc[subset_df['Size'] <= max_sign_length*8]
@@ -471,7 +672,26 @@ class PyApp:
                 self.message_display("Failed to read file. Please verify the file contents.")
 
     def generate_random_subset_using_range_dialog(self, widget, data):
-        """Function to take input for generating a random subset of existing Signatures"""
+        """
+        Function to take input for generating a random subset of existing Signatures. 
+        Initializes GUI dialog boxes to process inputs.
+        
+        returns None
+
+        **UI Flow**:
+            * Open signatures dictionary file
+            * Display dialog to get inputs for random subset creation
+            
+        :param widget: Calling widget
+        :param data: Data for widget
+        :type widget: gtk.Widget
+        :type data: string
+        :returns: None
+        :rtype: None
+
+        .. seealso::  create_random_subset_using_range
+
+        """
         file_location = self.read_from_file(widget, data, message="Open Signature CSV", file_type="csv")
         #file_location = 'C:\Users\sanke\workspace\PythonDev\snortDB_50.csv'
         try:
@@ -535,7 +755,7 @@ class PyApp:
                         if(n_signs==0 or n_signs>len(df)):
                             self.message_display("Please enter a valid number of signatures!")
                             dialog.destroy()
-                            self.generate_random_subset_dialog(widget, data=None)
+                            return 1
                         dialog.destroy()
                         self.create_random_subset_using_range(df, n_signs, rand_seed, min_sign_length, max_sign_length)
                         
@@ -547,7 +767,27 @@ class PyApp:
             return 1
 
     def generate(self, widget, Spin_Btn, Btn, Spin_Btn_Count ,entry):
-        """Callback function to parse signature random patterns"""
+        """
+        Function to creates a random set of signatures based on inputs specified through the dialog
+        
+        returns None
+        :param widget: Calling widget
+        :param Spin_Btn: Dataframe to be saved
+        :param Btn: No. of signatures
+        :param Spin_Btn_Count: Random seed
+        :param entry: Minimum signature length
+        :type widget: pandas.Dataframe
+        :type Spin_Btn: gtk.SpinButton
+        :type Btn: gtk.Button
+        :type Spin_Btn_Count: gtk.SpinButton
+        :type entry: gtk.Entry
+        
+        :returns: None
+        :rtype: None
+
+        .. seealso::  generate_pattern
+        
+        """
         #Generate array for various sizes
         signature_length = []
         
@@ -588,6 +828,26 @@ class PyApp:
             self.message_display(message_text="File extension must be '.txt'. Please try again!")
     
     def create_random_subset(self, widget, dialog, total_signatures, df, si):
+        """
+        Function to creates a random subset of signatures based on inputs specified through the graph dialog
+        
+        returns None
+        
+        :param dialog: Calling dialog
+        :param total_signatures: Total no. of signatures
+        :param df: Dataframe to be saved
+        :param si: Size dictionary
+        :type dialog: gtk.Dialog
+        :type total_signatures: int
+        :type df: pandas.Dataframe
+        :type si: dictionary
+        
+        :returns: None
+        :rtype: None
+
+        .. seealso::  generate_random_subset
+        
+        """
         warning_message = ''
         
         #Generate array for various sizes
@@ -697,7 +957,27 @@ class PyApp:
           
         
     def generate_random_subset(self, widget, data):
-        """Function to generate a random subset from a CSV file of existing signatures"""
+        """
+        Function to take input for generating a random subset of existing Signatures using a histogram of signature lengths.
+        Initializes GUI dialog boxes to process inputs.
+        
+        returns None
+
+        **UI Flow**:
+            * Open signatures dictionary file
+            * Display dialog to get inputs for random subset creation
+            * Display histogram of signature lengths
+            
+        :param widget: Calling widget
+        :param data: Data for widget
+        :type widget: gtk.Widget
+        :type data: string
+        :returns: None
+        :rtype: None
+
+        .. seealso::  create_random_subset
+
+        """
         file_location = self.read_from_file(widget, data, message="Open Signature CSV", file_type="csv")
         #file_location = 'C:\Users\sanke\workspace\PythonDev\snortDB_50.csv'
         try:
@@ -772,7 +1052,21 @@ class PyApp:
     
     
     def generate_bar_plot_for_subset(self, widget, si):
-        """Generates a bar plot for displaying size information neatly"""
+        """
+        Function to create a bar plot of signature dictionary
+        
+        returns None
+
+        :param widget: Calling widget
+        :param si: Sizes of signatures
+        :type widget: gtk.Widget
+        :type si: dictionary
+        :returns: None
+        :rtype: None
+
+        .. seealso::  generate_random_subset
+
+        """
         size_arr = si.keys()
         value_arr = si.values()
         plt.title("Size Distribution Graph (Click on a size to select for dialog box)")
@@ -806,7 +1100,25 @@ class PyApp:
 
         
     def generate_pattern(self, widget, data):
-        """Callback function to create dialog to generate random patterns"""
+        """
+        Function to take input for generating a random set of Signatures. 
+        Initializes GUI dialog boxes to process inputs.
+        
+        returns None
+
+        **UI Flow**:
+            * Display dialog to get inputs for random signature dictionary creation
+            
+        :param widget: Calling widget
+        :param data: Data for widget
+        :type widget: gtk.Widget
+        :type data: string
+        :returns: None
+        :rtype: None
+
+        .. seealso::  generate
+
+        """
         dialog = gtk.Dialog(title="Generate Random Text for Signatures", parent=None, 
                                 flags=gtk.DIALOG_MODAL|gtk.DIALOG_NO_SEPARATOR)
         dialog.set_default_response(gtk.RESPONSE_OK)
@@ -868,7 +1180,21 @@ class PyApp:
     
     
     def active_signature(self, widget, data):
-        """Updates active signature"""
+        """
+        Function to update active signature from Signature dictionary window
+        
+        returns None
+    
+        :param widget: Calling widget
+        :param data: Data for widget
+        :type widget: gtk.Widget
+        :type data: string
+        :returns: None
+        :rtype: None
+
+        .. seealso::  active_stream
+
+        """
         if widget.get_active():
             if(data!=''):
                 self.current_signature = int(data)
@@ -878,7 +1204,21 @@ class PyApp:
                 return
     
     def active_stream(self, widget, data):
-        """Updates active stream"""
+        """
+        Function to update active stream from Stream map
+        
+        returns None
+    
+        :param widget: Calling widget
+        :param data: Data for widget
+        :type widget: gtk.Widget
+        :type data: string
+        :returns: None
+        :rtype: None
+
+        .. seealso::  active_signature
+
+        """
         if widget.get_active():
             if(data!=''):
                 self.current_stream = int(data)
@@ -888,14 +1228,50 @@ class PyApp:
                 return
     
     def active_config_stream(self, widget, data):
-        """Updates active config stream"""
+        """
+        Function to update active config stream
+        
+        returns None
+    
+        :param widget: Calling widget
+        :param data: Data for widget
+        :type widget: gtk.Widget
+        :type data: string
+        :returns: None
+        :rtype: None
+
+        .. note:: Function no longer used. Legacy code.
+
+        """
         if widget.get_active():
             if(data!=''):
                 self.current_config_stream = int(data)
                 self.current_config_stream_idx = self.config_df[self.config_df['SID']==self.current_config_stream].index[0]
     
     def update_config_GUI(self, SID=None, L1=None, L2=None, Size=None, Select_Stream=None, Signature=None, SLR=None):
-        """Updates the GUI based on input parameters. Send None if you don't want to update"""
+        """
+        Function to update config window GUI based on inputs
+        
+        returns None
+    
+        :param SID: Stream ID
+        :param L1: L1 Hash value
+        :param L2: L2 Hash value
+        :param Size: Size of stream
+        :param Select_Stream: Legacy code. Unused.
+        :param Signature: Inserted signatures
+        :param SLR: SLR value
+        :type SID: int
+        :type L1: int
+        :type L2: int
+        :type Size: int
+        :type Select_Stream: bool
+        :type Signature: string
+        :type SLR: string
+        :returns: None
+        :rtype: None
+
+        """
         index=self.current_config_stream_idx
         if SID!=None:
             self.Config_SID[index].set_text(str(SID))
@@ -911,7 +1287,27 @@ class PyApp:
             self.Config_SLR[index].set_text(str(SLR))
     
     def update_Stream_GUI(self, SID, Size_Stream, Select_Stream, SgnPosition, History, index):
-        """Updates the GUI based on input parameters. Send None if you don't want to update"""
+        """
+        Function to update config window GUI based on inputs
+        
+        returns None
+    
+        :param SID: Stream ID
+        :param Size_Stream: Size of stream
+        :param Select_Stream: Current Stream is active
+        :param SgnPosition: Position of inserted signature
+        :param History: History for selected stream
+        :param index: Index of stream
+        :type SID: int
+        :type Size_Stream: int
+        :type Select_Stream: bool
+        :type SgnPosition: string
+        :type History: string
+        :type index: int
+        :returns: None
+        :rtype: None
+
+        """
         if SID!=None:
             self.SID[index].set_text(str(SID))
         if Size_Stream!=None:
@@ -941,7 +1337,22 @@ class PyApp:
     
     
     def display_text_view(self, widget, data):
-        """Display original text of current stream"""
+        """
+        Function to display original Text of current stream 
+        
+        returns None
+
+        **UI Flow**:
+            * Display a dialog box with hex to string converted stream
+            
+        :param widget: Calling widget
+        :param data: Unused
+        :type widget: gtk.Widget
+        :type data: string
+        :returns: None
+        :rtype: None
+
+        """
         try:
             dialog = gtk.Dialog(title="Text View of Stream", parent=None, 
                                     flags=gtk.DIALOG_MODAL|gtk.DIALOG_NO_SEPARATOR, 
@@ -1004,7 +1415,15 @@ class PyApp:
             self.message_display("Please open a stream map before proceeding!")
                 
     def create_stream_table(self):
-        """Create Table to display stream values"""
+        """
+        Function to create a stream table that can be inserted into stream window. Created to separate code flow.
+        
+        returns None
+            
+        :returns: None
+        :rtype: None
+
+        """
         self.table_stream = gtk.Table(rows=1+MAX_COUNT_STREAMS, columns=4, homogeneous=False) 
         self.table_stream.set_col_spacings(10)
         title_bar = ['Select', 'SID', 'Size(bytes)', 'Signature (ID: Start-End bytes)']
@@ -1055,6 +1474,22 @@ class PyApp:
         self.table_stream.show()
     
     def delete_verify_window(self, widget, data=None):
+        """
+        Function to kill verification window and exit 
+        
+        returns kill event signal
+
+        **UI Flow**:
+            * Display a dialog box confirm if user wants to quit the tool
+            
+        :param widget: Calling widget
+        :param data: Unused
+        :type widget: gtk.Widget
+        :type data: string
+        :returns: Kill event signal for gtk object
+        :rtype: bool
+
+        """
         retValue = self.message_display("Would you like to save your progress before quitting?", _type=gtk.MESSAGE_QUESTION, buttons=(gtk.BUTTONS_YES_NO))
         if retValue==gtk.RESPONSE_YES:
             self.save_stats(widget, data)
@@ -1063,6 +1498,22 @@ class PyApp:
         del self.window3
             
     def delete_stream_window(self, widget, data=None):
+        """
+        Function to kill stream window and exit 
+        
+        returns kill event signal
+
+        **UI Flow**:
+            * Display a dialog box confirm if user wants to quit the tool
+            
+        :param widget: Calling widget
+        :param data: Unused
+        :type widget: gtk.Widget
+        :type data: string
+        :returns: Kill event signal for gtk object
+        :rtype: bool
+
+        """
         retValue = self.message_display("Would you like to save your progress before quitting?", _type=gtk.MESSAGE_QUESTION, buttons=(gtk.BUTTONS_YES_NO))
         if retValue==gtk.RESPONSE_YES:
             self.save_stream_map(widget, data)    
@@ -1072,6 +1523,22 @@ class PyApp:
         del self.window2
     
     def delete_configuration_window(self, widget, data=None):
+        """
+        Function to kill configuration window and exit 
+        
+        returns kill event signal
+
+        **UI Flow**:
+            * Display a dialog box confirm if user wants to quit the tool
+            
+        :param widget: Calling widget
+        :param data: Unused
+        :type widget: gtk.Widget
+        :type data: string
+        :returns: Kill event signal for gtk object
+        :rtype: bool
+
+        """
         retValue = self.message_display("Would you like to save your progress before quitting?", _type=gtk.MESSAGE_QUESTION, buttons=(gtk.BUTTONS_YES_NO))
         if retValue==gtk.RESPONSE_YES:
             self.save_binary_after_config(widget, data)    
@@ -1080,6 +1547,22 @@ class PyApp:
         del self.window4
         
     def delete_signature_window(self, widget, data=None):
+        """
+        Function to kill signature window and exit 
+        
+        returns kill event signal
+
+        **UI Flow**:
+            * Display a dialog box confirm if user wants to quit the tool
+            
+        :param widget: Calling widget
+        :param data: Unused
+        :type widget: gtk.Widget
+        :type data: string
+        :returns: Kill event signal for gtk object
+        :rtype: bool
+
+        """
         retValue = self.message_display("Would you like to save your progress before quitting?", _type=gtk.MESSAGE_QUESTION, buttons=(gtk.BUTTONS_YES_NO))
         if retValue==gtk.RESPONSE_YES:
             self.save_signature(widget, data)
@@ -1090,13 +1573,29 @@ class PyApp:
         del self.window
     
     def delete_load_window(self, widget, data=None):
+        """
+        Function to kill main window and exit 
+        
+        returns kill event signal
+
+        **UI Flow**:
+            * Display a dialog box confirm if user wants to quit the tool
+            
+        :param widget: Calling widget
+        :param data: Unused
+        :type widget: gtk.Widget
+        :type data: string
+        :returns: Kill event signal for gtk object
+        :rtype: bool
+
+        """
         retValue = self.message_display("Are you sure you want to quit?", _type=gtk.MESSAGE_QUESTION, buttons=(gtk.BUTTONS_YES_NO))
         if retValue!=gtk.RESPONSE_YES:
             return True
         return False
     
     def clone_configuration(self, widget):
-        """Clones configuration of the selected stream"""
+        """Function no longer used. Legacy code."""
         SID = self.config_df['SID'][len(self.config_df)-1]+1
         self.config_df = self.config_df.append(self.config_df.loc[self.current_config_stream_idx], ignore_index=True)
         self.config_df['SID'][len(self.config_df)-1]=SID
@@ -1104,6 +1603,23 @@ class PyApp:
         self.create_configuration_window(widget, '', self.config_df)
     
     def load_binary_after_config(self, widget, data):
+        """
+        Function to load filter after config and display it on the UI 
+        
+        returns None
+
+        **UI Flow**:
+            * Display a dialog for opening Stream Filter file
+            * Update UI with selected file
+            
+        :param widget: Calling widget
+        :param data: Unused
+        :type widget: gtk.Widget
+        :type data: string
+        :returns: None
+        :rtype: None
+        
+        """
         if(hasattr(self,'window4')):
             self.window4.destroy()
         config_df = pd.DataFrame(columns = ['SID', 'Size', 'Hex', 'Pattern', 'SLR', 'L1', 'L2'])
@@ -1138,7 +1654,22 @@ class PyApp:
         self.create_configuration_window(widget, data, config_df)
         
     def save_binary_after_config(self, widget, data):
-        """Saves stream binary data after configuration changes have been made"""
+        """
+        Function to save filter after config
+        
+        returns None
+
+        **UI Flow**:
+            * Display a dialog for saving Stream Filter file
+            
+        :param widget: Calling widget
+        :param data: Unused
+        :type widget: gtk.Widget
+        :type data: string
+        :returns: None
+        :rtype: None
+        
+        """
         if((self.config_df['L1'] == 0).any()):
             self.message_display("Some configuration fields are missing. Please recheck and try again!")
             return
@@ -1162,7 +1693,20 @@ class PyApp:
             self.message_display(message_text="Successfully created "+file_location, _type=gtk.MESSAGE_INFO)
                 
     def update_configuration(self, widget):
-        """Updates configuration of the selected stream"""
+        """
+        Function to update config for streams
+        
+        returns None
+
+        **UI Flow**:
+            * Display a dialog for taking in L1, L2 hashes
+            
+        :param widget: Calling widget
+        :type widget: gtk.Widget
+        :returns: None
+        :rtype: None
+        
+        """
         dialog = gtk.Dialog(title="Specify L1 and L2 Hashes", parent=None, 
                                 flags=gtk.DIALOG_MODAL|gtk.DIALOG_NO_SEPARATOR, 
                                 buttons=(gtk.STOCK_OK, gtk.RESPONSE_OK))
@@ -1209,7 +1753,20 @@ class PyApp:
     
     
     def get_L1_L2(self, widget):
-        """Gets L1 and L2 hash values using a dialog box"""
+        """
+        Function to get config (L1 and L2 hash values) for streams
+        
+        returns None
+
+        **UI Flow**:
+            * Display a dialog for taking in L1, L2 hashes
+            
+        :param widget: Calling widget
+        :type widget: gtk.Widget
+        :returns: None
+        :rtype: None
+        
+        """
         dialog = gtk.Dialog(title="Specify L1 and L2 Hashes", parent=None, 
                                 flags=gtk.DIALOG_MODAL|gtk.DIALOG_NO_SEPARATOR, 
                                 buttons=(gtk.STOCK_OK, gtk.RESPONSE_OK))
@@ -1253,10 +1810,19 @@ class PyApp:
                 self.get_L1_L2(widget)
         
         else:
+            dialog.destroy()
             return None, None
     
     def create_configuration_table(self):
-        """Create Table to display configuration values"""
+        """
+        Function to create a config table that can be inserted into config window. Created to separate code flow.
+        
+        returns None
+            
+        :returns: None
+        :rtype: None
+
+        """
         df=self.config_df
         self.table_configuration = gtk.Table(rows=len(df)+1, columns=5, homogeneous=False) 
         self.table_configuration.set_col_spacings(10)
@@ -1341,7 +1907,21 @@ class PyApp:
         self.table_configuration.show()
         
     def create_configuration_window(self, widget, data, streams_df):
-        """Creates Window 4 for Filter configuration before generating binary"""
+        """
+        Function to create config window before generating binary 
+        
+        returns None
+    
+        :param widget: Calling widget
+        :param data: Unused
+        :param streams_df: Streams dataframe
+        :type widget: gtk.Widget
+        :type data: string
+        :type streams_df: pandas.Dataframe
+        :returns: None
+        :rtype: None
+
+        """
         if(hasattr(self,'window4')==1 and self.dummy_configuration_window == False):
             self.message_display("Another window is active. Please close that window before proceeding.", _type=gtk.MESSAGE_WARNING)
             self.delete_configuration_window(widget=None, data=None)
@@ -1408,7 +1988,15 @@ class PyApp:
         self.window4.show_all() 
         
     def create_verification_table(self):
-        """Create Table to display verification values"""
+        """
+        Function to create a verification table that can be inserted into verification window. Created to separate code flow.
+        
+        returns None
+            
+        :returns: None
+        :rtype: None
+
+        """
         df=self.ver_df
         self.table_verification = gtk.Table(rows=len(df)+1, columns=6, homogeneous=False) 
         self.table_verification.set_col_spacings(10)
@@ -1444,7 +2032,15 @@ class PyApp:
         self.table_verification.show()
     
     def create_stats_table(self):
-        """Create table to display stats"""
+        """
+        Function to create a stats table that can be inserted into stats window. Created to separate code flow.
+        
+        returns None
+            
+        :returns: None
+        :rtype: None
+
+        """
         self.table_stats = gtk.Table(rows=2, columns=7, homogeneous=True)
         ctr=0
         for i in self.ver_stats:
@@ -1465,7 +2061,19 @@ class PyApp:
         self.table_stats.show()
         
     def create_verification_window(self, ver_df, stats):
-        """Creates Window 3 for Stream verification"""
+        """
+        Function to create verification window for viewing stats 
+        
+        returns None
+    
+        :param ver_df: Verification dataframe
+        :param stats: Stats dictionary
+        :type ver_df: pandas.Dataframe
+        :type stats: dictionary
+        :returns: None
+        :rtype: None
+
+        """
         if(hasattr(self,'window3')==1 and self.dummy_verification_window == False):
             self.message_display("Another window is active. Please close that window before proceeding.", _type=gtk.MESSAGE_WARNING)
             self.delete_verify_window(widget=None, data=None)
@@ -1532,7 +2140,15 @@ class PyApp:
         
         
     def create_stream_window(self):
-        """Creates Window 2 for Stream viewing and editing"""
+        """
+        Function to create stream window for viewing and editing streams 
+        
+        returns None
+    
+        :returns: None
+        :rtype: None
+
+        """
         #Destroy old dialog before allowing a new one
         if(hasattr(self,'window2')==1):
             self.message_display("Another window is active. Please close that window before proceeding.", _type=gtk.MESSAGE_WARNING)
@@ -1595,7 +2211,19 @@ class PyApp:
         self.window2.show_all()
     
     def insert_signature(self, widget, entry):
-        """Validates and inserts signature into the stream at the given location"""
+        """
+        Function to insert signature at a specified loation of a stream 
+        
+        returns None
+    
+        :param widget: Calling widget
+        :param entry: Signature index
+        :type widget: gtk.Widget
+        :type entry: gtk.Entry
+        :returns: None
+        :rtype: None
+
+        """
         start_index = int(entry.get_text())
         search_val = self.df[self.df['ID']==self.current_signature]
         search_val.reset_index(drop=True, inplace=True)
@@ -1662,7 +2290,17 @@ class PyApp:
         self.update_Stream_GUI(SID=None, Size_Stream=None, Select_Stream=None, SgnPosition=hist_linear, History=hist_newline, index=stream_index)
         
     def undo_insert(self, widget):
-        """Undo insert of stream in stream map"""
+        """
+        Function to undo insert of last inserted signature in a stream 
+        
+        returns None
+    
+        :param widget: Calling widget
+        :type widget: gtk.Widget
+        :returns: None
+        :rtype: None
+
+        """
         search_val_stream = self.stream_df[self.stream_df['SID']==self.current_stream]
         stream_index = search_val_stream.index[0]
         
@@ -1702,7 +2340,17 @@ class PyApp:
             self.message_display("No more data to perform undo")
     
     def update_index(self, widget):
-        """Rolls over cursor from stream selection radio button"""
+        """
+        Function to roll over cursor stream selection window 
+        
+        returns None
+    
+        :param widget: Calling widget
+        :type widget: gtk.Widget
+        :returns: None
+        :rtype: None
+
+        """
         try:
             stream_index = self.stream_df[self.stream_df['SID']==self.current_stream].index[0]
             if(stream_index+1<self.current_index):
@@ -1713,7 +2361,19 @@ class PyApp:
             pass
         
     def add_new_stream(self, SID, Stream):
-        """Adds new stream based on input parameters"""
+        """
+        Function to add a new stream 
+        
+        returns None
+    
+        :param SID: Stream ID
+        :param Stream: Stream Size
+        :type SID: int
+        :type Stream: int
+        :returns: None
+        :rtype: None
+
+        """
         #Add new entry in dataframe
         self.stream_df.loc[self.current_index]=[int(SID), len(Stream)*8, Stream.encode("Hex"), Stream]
         
@@ -1730,8 +2390,17 @@ class PyApp:
         self.stream_df_copy = self.stream_df.copy()
         
     def create_stream(self, widget):
-        """Pops up a dialog box to take in SID and Stream Length. 
-            Generates a random stream and updates the table"""
+        """
+        Function to get ID and Size for a stream 
+        
+        returns None
+    
+        :param widget: Calling widget
+        :type widget: gtk.Widget
+        :returns: None
+        :rtype: None
+
+        """
         dialog = gtk.Dialog(title="Generate Random Text for Stream", parent=None, 
                                 flags=gtk.DIALOG_MODAL|gtk.DIALOG_NO_SEPARATOR, 
                                 buttons=(gtk.STOCK_OK, gtk.RESPONSE_OK))
@@ -1778,12 +2447,25 @@ class PyApp:
             dialog.destroy()
     
     def save_binary_stream_output(self, widget, data):
-        """Saves Binary Stream output as a CSV File based on current stream dataframe"""
+        """
+        Function to save filter stream for config
+        
+        returns None
+    
+        :param widget: Calling widget
+        :param data: Unused
+        :type widget: gtk.Widget
+        :type data: string
+        :returns: None
+        :rtype: None
+        
+        """
         stream_df_map = pd.DataFrame(columns = ['SID', 'Size', 'Hex', 'Pattern', 'SLR', 'L1', 'L2'])
         L1 = None
         L2 = None
-        while(L1==None or L2==None):
-            L1, L2 = self.get_L1_L2(widget)
+        L1, L2 = self.get_L1_L2(widget)
+        if(L1==None or L2==None):
+            return
             
         for ctr in range(self.current_index):
             SID = self.stream_df['SID'][ctr]
@@ -1891,7 +2573,18 @@ class PyApp:
         """
     
     def generate_load_line(self, size_arr):
-        """Takes size array for a stream as input and returns the SLR load line"""
+        """
+        Function to generate SLR line based on size list
+        
+        returns Load Line
+
+            
+        :param size_arr: Size list
+        :type size_arr: list
+        :returns: Load line
+        :rtype: string
+        
+        """
         if(len(size_arr)==0):
             Load_Line = 'L,0,0,0,0,0'
         elif(len(size_arr)==1):
@@ -1907,7 +2600,19 @@ class PyApp:
         return Load_Line
     
     def save_stats(self, widget, data):
-        """Saves Stats file as a CSV File based on a File save GUI"""
+        """
+        Function to save Stats file as a CSV File
+        
+        returns None
+    
+        :param widget: Calling widget
+        :param data: Unused
+        :type widget: gtk.Widget
+        :type data: string
+        :returns: None
+        :rtype: None
+        
+        """
         file_location = self.save_signature(widget, data=None, save_default_df=False, df=self.ver_df, header=True)
         if(len(file_location)>0):
             stats_data = ''
@@ -1928,11 +2633,25 @@ class PyApp:
                 f.write(stats_data + content)
     
     def save_signature_filter(self, widget, data):
-        """Saves signature filter data, L1, L2 values along with signature data"""
+        """
+        Function to save signature filter data, L1, L2 values along with signature data
+        
+        returns None
+    
+        :param widget: Calling widget
+        :param data: Unused
+        :type widget: gtk.Widget
+        :type data: string
+        :returns: None
+        :rtype: None
+        
+        """
         L1 = None
         L2 = None
-        while(L1==None or L2==None):
-            L1, L2 = self.get_L1_L2(widget)
+        L1, L2 = self.get_L1_L2(widget)
+        if(L1==None or L2==None):
+            return
+            
         file_location = self.save_signature(widget, data)
         filter_data = 'LC,0,0,0,0,0,'+str(L1)+','+str(L2) +'\n'
         with open(file_location, 'r+') as f:
@@ -1941,7 +2660,19 @@ class PyApp:
             f.write(filter_data + content)
         
     def save_stream_map(self, widget, data):
-        """Saves Stream map as a CSV File based on a File save GUI"""
+        """
+        Function to save Stream map as a CSV File
+        
+        returns None
+    
+        :param widget: Calling widget
+        :param data: Unused
+        :type widget: gtk.Widget
+        :type data: string
+        :returns: None
+        :rtype: None
+        
+        """
         stream_df_map = pd.DataFrame(columns = ['SID', 'Stream_Size', 'ID', 'Start_index', 'End_Index', 'Full_Signature'])
         idx=0
         for ctr in range(self.current_index):
@@ -2082,7 +2813,19 @@ class PyApp:
             self.message_display("Failed to process inputs")
         
     def generate_random_stream_map_dialog(self, widget, data):
-        """Function to take input for generating a Random Stream Map"""
+        """
+        Function to take input for generating a Random Stream Map
+        
+        returns None
+    
+        :param widget: Calling widget
+        :param data: Unused
+        :type widget: gtk.Widget
+        :type data: string
+        :returns: None
+        :rtype: None
+        
+        """
         if(hasattr(self,'current_signature')!=1):
             self.message_display("Please open the Signature window before proceeding further!", _type=gtk.MESSAGE_ERROR)
             return
@@ -2181,7 +2924,26 @@ class PyApp:
             dialog.destroy()
         
     def update_min_max_val_for_random_stream_map(self, widget, scaleMin, scaleMax, minFlag):
-        """Ensures Min/Max value are always separated in the random stream map dialog"""
+        """
+        Function to ensure Min/Max value are always separated in generate_random_subset_dialog
+        
+        returns None
+            
+        :param widget: Calling widget
+        :param scaleMin: Minimum value slider
+        :param scaleMax: Maximum value slider
+        :param minFlag: To reuse the function for both min/max
+        :type widget: gtk.Widget
+        :type scaleMin: int
+        :type scaleMax: int
+        :type minFlag: int
+        
+        :returns: None
+        :rtype: None
+
+        .. seealso::  generate_random_stream_map_dialog
+        
+        """
         if scaleMin.get_value()>scaleMax.get_value() and minFlag==True:
             scaleMax.set_value(scaleMin.get_value()+1)
         
@@ -2189,7 +2951,24 @@ class PyApp:
             scaleMin.set_value(scaleMax.get_value()-1)
         
     def generate_min_max_frame_for_random_stream_map(self, frame_name, min_val, max_val):
-        """Generates a frame to simplify UI creation code for random stream map generation"""
+        """
+        Function to generate a frame to simplify UI creation code for generate_random_stream_map_dialog
+        
+        returns Frame
+            
+        :param frame_name: Title for the frame
+        :param min_val: Minimum value for the slider
+        :param max_val: Maximum value for the slider
+        :type frame_name: string
+        :type min_val: int
+        :type max_val: int
+        
+        :returns: Frame
+        :rtype: gtk.Frame
+
+        .. seealso::  generate_random_stream_map_dialog
+        
+        """
         frame = gtk.Frame(frame_name)
         HBox1 = gtk.HBox()
         label = gtk.Label("Min:")
@@ -2218,7 +2997,22 @@ class PyApp:
         return frame
         
     def create_insertion_dialog(self, widget, data, undoButton=True):
-        """Function to create stream construction dialog box"""
+        """
+        Function to create stream construction dialog box
+        
+        returns None
+            
+        :param widget: Calling widget
+        :param data: Unused
+        :param undoButton: Show undo button?
+        :type widget: gtk.Widget
+        :type data: string
+        :type undoButton: bool
+        
+        :returns: None
+        :rtype: None
+
+        """
         if(hasattr(self,'current_signature')!=1):
             self.message_display("Please open the Signature window before proceeding further!", _type=gtk.MESSAGE_ERROR)
             return
@@ -2265,6 +3059,10 @@ class PyApp:
         self.insertionDialog.vbox.pack_start(button7)
         button7.connect("clicked", self.create_signature_window, dummy_df, {}, '')
         """
+
+        button4 = gtk.Button("Add a stream")
+        self.insertionDialog.vbox.pack_start(button4)
+        button4.connect("clicked", self.create_stream)
         
         button = gtk.Button("Insert Signature")
         self.insertionDialog.vbox.pack_start(button)
@@ -2278,10 +3076,6 @@ class PyApp:
         button3 = gtk.Button("Done with current stream")
         self.insertionDialog.vbox.pack_start(button3)
         button3.connect("clicked", self.update_index)
-        
-        button4 = gtk.Button("Add a stream")
-        self.insertionDialog.vbox.pack_start(button4)
-        button4.connect("clicked", self.create_stream)
         
         button5 = gtk.Button("Save Stream Map")
         self.insertionDialog.vbox.pack_start(button5)
@@ -2311,7 +3105,20 @@ class PyApp:
                     self.button[i].set_sensitive(state)
     
     def construct_stream(self, widget, data):
-        """Callback function to initiate stream construction process"""
+        """
+        Function to initiate stream construction window generation process
+        
+        returns None
+            
+        :param widget: Calling widget
+        :param data: Unused
+        :type widget: gtk.Widget
+        :type data: string
+        
+        :returns: None
+        :rtype: None
+
+        """
         
         #Make signature select line active
         self.change_signature_select_line_state()
@@ -2327,7 +3134,20 @@ class PyApp:
         self.stream_df = pd.DataFrame(columns = ['SID', 'Size', 'Hex', 'Original'])
     
     def verify_stream(self, widget, data):
-        """Callback function to inititate verification process"""
+        """
+        Function to initiate verification window generation process
+        
+        returns None
+            
+        :param widget: Calling widget
+        :param data: Unused
+        :type widget: gtk.Widget
+        :type data: string
+        
+        :returns: None
+        :rtype: None
+
+        """
         dummy_df = pd.DataFrame(columns = ['SID', 'Time', 'Query_Op', 'Start_Index', 'End_Index', 'Verification_Result', 'ID'])
         dummy_df.loc[0]=['', '', '', '', '', '', '']
         dummy_stats = (('Signature Count', ''),\
@@ -2357,7 +3177,24 @@ class PyApp:
     
     
     def message_display(self, message_text, _type=gtk.MESSAGE_ERROR, buttons=gtk.BUTTONS_OK):
-        """Generates a pop up message based on input parameters"""
+        """
+        Function to generate a pop up message based on input parameters. 
+        
+        returns Response
+
+        **UI Flow**:
+            * Display Message box with specified text and buttons
+            
+        :param message_text: Message text to be printed
+        :param _type: Is it an Error/Info/Question message box?
+        :param buttons: gtk.Buttons
+        :type message_text: string
+        :type _type: gtk.MessageType
+        :type buttons: gtk.Button
+        :returns: Response
+        :rtype: gtk.Response
+
+        """
         message = gtk.MessageDialog(type=_type, buttons=buttons)
         message.set_markup(message_text)
         message.set_position(gtk.WIN_POS_CENTER_ON_PARENT)
@@ -2370,7 +3207,19 @@ class PyApp:
         gtk.main_quit()
     
     def get_main_menu(self, window, menu_items):
-        """Returns a menu object that can be inserted into a window"""
+        """
+        Function to create a menu object that can be inserted into a window 
+        
+        returns menu object
+            
+        :param window: Calling window
+        :param menu_items: Menu Items to be included
+        :type widget: gtk.Window
+        :type menu_items: tuple
+        :returns: Menu objecct
+        :rtype: gtk.MenuBar
+
+        """
         accel_group = gtk.AccelGroup()
 
         # This function initializes the item factory.
@@ -2395,7 +3244,21 @@ class PyApp:
    
     def create_signature_window(self, widget, df, si, file_location):
         """
-            Creates Signature Window based on input df, si and file location
+        Function to create signature window 
+        
+        returns None
+
+        :param widget: Calling widget
+        :param df: Signature dataframe
+        :param si: Size dictionary
+        :param file_location: File location
+        :type widget: gtk.Widget
+        :type ver_df: pandas.Dataframe
+        :type stats: dictionary
+        :type file_location: string
+        :returns: None
+        :rtype: None
+
         """
         if(hasattr(self,'window')==1 and self.dummy_signature_window == False):
             self.message_display("Another window is active. Please close that window before proceeding.", _type=gtk.MESSAGE_WARNING)
@@ -2571,7 +3434,9 @@ class PyApp:
             
     def __init__(self):
         """
+            
             Initializes pyGTK and creates Welcome Screen Window
+
         """
         self.windowInit = gtk.Window(gtk.WINDOW_TOPLEVEL)
         self.windowInit.connect("destroy", lambda w: gtk.main_quit())
@@ -2610,11 +3475,17 @@ class PyApp:
 
 
 def verify_size(size_index):
-    """Verifies if constraints are met for size of signatures.
+    """
+        Verifies if constraints are met for size of signatures.
+        
         Returns 0, None if constraints are met
+        
         Returns 1, ErrorMessage if contraints aren't met
+        
         Inputs:
+        
         size_index: dictionary of sizes and their counts
+    
     """
     
     sorted_size = sorted(size_index.items(), key=operator.itemgetter(0))
@@ -2692,26 +3563,37 @@ def set_random_seed(seed):
     random.seed(seed)
     
 def id_generator(size=MIN_SIZE_SIGNATURE, chars=ALLOWABLE_CHARS):
-    """Generates a random ID of specified size and characters
-        Inputs:
-        size: Size of random string
-        chars: Characters to be included
+    """
+        Generates a random signature of specified size and characters
+        
+        returns random signature
+
+        :param size: Size of signature
+        :param chars: Allowable characters for signature creation
+        :type size: int
+        :type chars: string.Type
+        
+        :returns: Random signature
+        :rtype: string
+
     """
     return ''.join(random.choice(chars) for _ in range(size))
 
 def patternGenerator(file_name="patterns.txt", size_arr = [], min_n_lengths=MIN_N_LENGTHS, 
                      max_n_lengths=MAX_N_LENGTHS, min_size_signature=MIN_SIZE_SIGNATURE,
                      max_size_signature=MAX_SIZE_SIGNATURE, distance_consecutive=DISTANCE_CONSECUTIVE):
-    """Generates a file in the local directory with a set of random patterns.
+    """
+        Generates a file in the local directory with a set of random patterns.
+        
         Constraints:
+        
         Length is between MIN_SIZE_SIGNATURE, MAX_SIZE_SIGNATURE
+        
         Count is between MIN_N_LENGTHS, MAX_N_LENGTHS
+        
         Distance between lengths is greater than or equal to DISTANCE_CONSECUTIVE
         
-        Inputs:
-        file_name: Name of the file
-        size_arr: Array of sizes to generate
-        Optional parameters should be changed preferably via constants
+        returns return value
     """
     try:
         fo = open(file_name, "wb")
@@ -2749,13 +3631,15 @@ def patternGenerator(file_name="patterns.txt", size_arr = [], min_n_lengths=MIN_
         print "Failed to open file"
         return 1
 def verifyStats(ver_df, stream_bin_file_location):
-    """Verifies if signatures are present in the specified stream based on the binary file.
+    """
+        Verifies if signatures are present in the specified stream based on the binary file.
+        
         Generates processed stats dataframe and stats array of tuples.
+        
         Returns dataframe consisting of SID, Query OP, Start/End Index, Result and ID
+        
         Also return array of tuples of verification summary
-        Inputs:
-        ver_df: Dataframe of Verification data to be correlated with the binary file
-        stream_bin_file_location: Location of the file
+        
     """
     ver_df['Verification_Result'] = ''
     ver_df['ID'] = ''
@@ -2831,11 +3715,17 @@ def verifyStats(ver_df, stream_bin_file_location):
             
             
 def interpretStats(file_location="stats.csv", processed=0):
-    """Reads the Stats file and loads it as 'SID', 'Time', 'Query_Op', 'Start_Index' and 'End_Index'. 
+    """
+        Reads the Stats file and loads it as 'SID', 'Time', 'Query_Op', 'Start_Index' and 'End_Index'. 
+        
         Returns None, 1 on failure and a dataframe, 0 on success
+        
         Inputs:
+        
         file_location: Location of the file
+        
         processed: Is this a processed file/unprocessed file
+
     """
     try:
         if not processed:
@@ -2854,10 +3744,15 @@ def interpretStats(file_location="stats.csv", processed=0):
     return csv_data, 0
 
 def interpretStatsSummary(file_location):
-    """Reads the processed Stats file and determines the stats in the form of an array of tuples. 
+    """
+        Reads the processed Stats file and determines the stats in the form of an array of tuples. 
+        
         Returns None, 1 on failure and a stats_array, 0 on success
+        
         Inputs:
+        
         file_location: Location of the file
+
     """
     try:
         csv_data = pd.read_csv(file_location, nrows=1)
@@ -2877,11 +3772,17 @@ def interpretStatsSummary(file_location):
     return stats_array, 0
 
 def interpretPattern(read_csv=False, file_location="patterns.txt"):
-    """Reads the pattern file and generates ID, Hex and Size paramters. 
+    """
+        Reads the pattern file and generates ID, Hex and Size paramters. 
+        
         Returns None, None on failure and a dataframe, dictionary on success
+        
         Inputs:
+        
         read_csv: Is the file a CSV?
+        
         file_location: Name of the file
+
     """
     if(read_csv):
         try:
